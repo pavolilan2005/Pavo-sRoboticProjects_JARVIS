@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "modes": [
+    {
+      "id": "stream",
+      "name": "Modo Stream",
+      "aliases": [
+        "stream",
+        "directo"
+      ],
+      "enter_routine": "modo_stream",
+      "exit_routine": "terminar_stream",
+      "exclusive_group": "activity",
+      "monitors": [
+        {
+          "id": "thermal_guard",
+          "interval": 15,
+          "capability": "pc.status",
+          "field": "cpu_percent",
+          "operator": ">=",
+          "value": 90,
+          "action": "notifications.emit",
+          "params": {},
+          "cooldown": 120,
+          "action_params": {
+            "title": "JARVIS",
+            "message": "Carga de CPU superior al 90 % durante el stream.",
+            "priority": "high"
+          }
+        }
+      ]
+    },
+    {
+      "id": "estudio",
+      "name": "Modo Estudio",
+      "aliases": [
+        "estudio",
+        "concentración"
+      ],
+      "enter_routine": "modo_estudio",
+      "exit_routine": "",
+      "exclusive_group": "activity",
+      "monitors": []
+    }
+  ]
+}

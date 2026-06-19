@@ -1,0 +1,8 @@
+# Lector experimental de notificaciones de Windows.
+# Si pip no encuentra un paquete para tu versión de Python, JARVIS seguirá
+# funcionando y únicamente desactivará la lectura del Centro de notificaciones.
+winrt-Windows.Foundation
+winrt-Windows.Foundation.Collections
+winrt-Windows.UI.Notifications
+winrt-Windows.UI.Notifications.Management
+winrt-Windows.ApplicationModel

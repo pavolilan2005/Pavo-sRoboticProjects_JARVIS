@@ -1,0 +1,35 @@
+sounddevice
+google-genai
+Pillow
+requests
+beautifulsoup4
+ddgs
+duckduckgo-search
+playwright
+pyautogui
+pyperclip
+pygetwindow
+opencv-python
+numpy
+mss
+psutil
+comtypes; platform_system == "Windows"
+pycaw; platform_system == "Windows"
+win10toast; platform_system == "Windows"
+send2trash
+youtube-transcript-api
+pywinauto; platform_system == "Windows"
+python-pptx
+PyQt6
+pdfplumber
+PyPDF2
+python-docx
+pandas
+pydub
+pyserial
+openpyxl
+obsws-python
+spotipy
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib

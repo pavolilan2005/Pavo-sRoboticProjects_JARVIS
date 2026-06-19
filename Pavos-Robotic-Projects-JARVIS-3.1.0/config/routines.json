@@ -1,0 +1,157 @@
+{
+  "version": 1,
+  "routines": [
+    {
+      "id": "modo_stream",
+      "name": "Modo Stream",
+      "aliases": [
+        "modo stream",
+        "prepara el directo",
+        "vamos a transmitir"
+      ],
+      "description": "Prepara aplicaciones, música, OBS e iluminación para transmitir.",
+      "steps": [
+        {
+          "parallel": [
+            {
+              "capability": "apps.open",
+              "params": {
+                "app_name": "OBS Studio"
+              },
+              "critical": true
+            },
+            {
+              "capability": "apps.open",
+              "params": {
+                "app_name": "Spotify"
+              },
+              "critical": false
+            },
+            {
+              "capability": "browser.open",
+              "params": {
+                "url": "https://dashboard.twitch.tv/"
+              },
+              "critical": false
+            }
+          ]
+        },
+        {
+          "wait": 3
+        },
+        {
+          "capability": "obs.set_scene",
+          "params": {
+            "scene": "Starting Soon"
+          },
+          "critical": false,
+          "retries": 1
+        },
+        {
+          "capability": "spotify.play_playlist",
+          "params": {
+            "playlist": "Stream"
+          },
+          "critical": false
+        },
+        {
+          "capability": "spotify.set_volume",
+          "params": {
+            "volume": 22
+          },
+          "critical": false
+        },
+        {
+          "capability": "domotics.activate_scene",
+          "params": {
+            "scene": "stream"
+          },
+          "critical": false
+        },
+        {
+          "capability": "pc.status",
+          "params": {},
+          "critical": false
+        }
+      ]
+    },
+    {
+      "id": "terminar_stream",
+      "name": "Terminar Stream",
+      "aliases": [
+        "termina el stream",
+        "cierra el directo"
+      ],
+      "description": "Cierra el entorno de streaming de forma segura.",
+      "steps": [
+        {
+          "capability": "obs.stop_recording",
+          "params": {},
+          "critical": false
+        },
+        {
+          "capability": "spotify.pause",
+          "params": {},
+          "critical": false
+        },
+        {
+          "capability": "domotics.activate_scene",
+          "params": {
+            "scene": "normal"
+          },
+          "critical": false
+        }
+      ]
+    },
+    {
+      "id": "modo_estudio",
+      "name": "Modo Estudio",
+      "aliases": [
+        "modo estudio",
+        "vamos a estudiar"
+      ],
+      "description": "Prepara un entorno de concentración.",
+      "steps": [
+        {
+          "parallel": [
+            {
+              "capability": "apps.open",
+              "params": {
+                "app_name": "Visual Studio Code"
+              },
+              "critical": false
+            },
+            {
+              "capability": "apps.open",
+              "params": {
+                "app_name": "Spotify"
+              },
+              "critical": false
+            }
+          ]
+        },
+        {
+          "capability": "spotify.play_playlist",
+          "params": {
+            "playlist": "Focus"
+          },
+          "critical": false
+        },
+        {
+          "capability": "spotify.set_volume",
+          "params": {
+            "volume": 18
+          },
+          "critical": false
+        },
+        {
+          "capability": "domotics.activate_scene",
+          "params": {
+            "scene": "estudio"
+          },
+          "critical": false
+        }
+      ]
+    }
+  ]
+}
