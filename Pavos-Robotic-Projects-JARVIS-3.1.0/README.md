@@ -22,3 +22,10 @@ El micrófono se transmite continuamente a Gemini mientras JARVIS no habla. No s
 
 ## Seguridad
 `config/secrets.json` queda excluido por `.gitignore`.
+
+## Corrección 2.0.2
+
+Esta versión corrige el cierre prematuro del event loop cuando Gemini todavía no
+tiene API key y evita que el callback de PortAudio muestre `Python-CFFI error`.
+La clave puede guardarse desde **INTEGRACIONES** y la conexión se reintenta sin
+reiniciar la aplicación.

@@ -1,3 +1,13 @@
 {
-  "devices": []
+  "devices": [
+    {
+      "id": "device_1",
+      "name": "Foco",
+      "node_id": "esp32_1",
+      "pin": 2,
+      "type": "digital_output",
+      "active_low": false,
+      "aliases": []
+    }
+  ]
 }

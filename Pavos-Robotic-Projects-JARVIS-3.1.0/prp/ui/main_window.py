@@ -67,7 +67,7 @@ class MainWindow(QMainWindow):
     def _tasks_tab(self):
         tab=QWidget();lay=QVBoxLayout(tab);self.task_list=QListWidget();lay.addWidget(self.task_list);row=QHBoxLayout();self.task_title=QLineEdit();self.task_title.setPlaceholderText('Nueva tarea');add=QPushButton('CREAR TAREA');add.clicked.connect(self.add_task);done=QPushButton('COMPLETAR');done.clicked.connect(self.complete_task);row.addWidget(self.task_title);row.addWidget(add);row.addWidget(done);lay.addLayout(row);self.tabs.addTab(tab,'TAREAS')
     def _integrations_tab(self):
-        tab=QWidget();form=QFormLayout(tab);self.gkey=QLineEdit();self.gkey.setEchoMode(QLineEdit.EchoMode.Password);self.sid=QLineEdit();self.ssecret=QLineEdit();self.ssecret.setEchoMode(QLineEdit.EchoMode.Password);self.opass=QLineEdit();self.opass.setEchoMode(QLineEdit.EchoMode.Password);self.ohost=QLineEdit();self.oport=QSpinBox();self.oport.setMaximum(65535)
+        tab=QWidget();form=QFormLayout(tab);note=QLabel('La API key de Gemini es necesaria para que JARVIS pase de OFFLINE a SLEEPING. Al guardarla, la conexión se intentará automáticamente.');note.setWordWrap(True);form.addRow(note);self.gkey=QLineEdit();self.gkey.setEchoMode(QLineEdit.EchoMode.Password);self.sid=QLineEdit();self.ssecret=QLineEdit();self.ssecret.setEchoMode(QLineEdit.EchoMode.Password);self.opass=QLineEdit();self.opass.setEchoMode(QLineEdit.EchoMode.Password);self.ohost=QLineEdit();self.oport=QSpinBox();self.oport.setMaximum(65535)
         for label,w in [('Gemini API key',self.gkey),('Spotify Client ID',self.sid),('Spotify Client Secret',self.ssecret),('OBS host',self.ohost),('OBS puerto',self.oport),('OBS contraseña',self.opass)]:form.addRow(label,w)
         save=QPushButton('GUARDAR CREDENCIALES');save.clicked.connect(self.save_integrations);form.addRow(save);self.tabs.addTab(tab,'INTEGRACIONES')
     def _activity_tab(self):
@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
             rid=item.text().split(' — ')[0];asyncio.run_coroutine_threadsafe(self.controller.execute('routine.run',{'routine_id':rid}),self.loop)
     def save_integrations(self):
         sec=self.controller.config.secrets();sec.update({'gemini_api_key':self.gkey.text().strip(),'spotify_client_id':self.sid.text().strip(),'spotify_client_secret':self.ssecret.text().strip(),'spotify_redirect_uri':'http://127.0.0.1:8888/callback','obs_password':self.opass.text()});self.controller.config.save('secrets.json',sec)
-        cfg=self.controller.config.load('integrations.json',{}) or {};cfg.setdefault('obs',{}).update({'host':self.ohost.text().strip() or '127.0.0.1','port':self.oport.value(),'enabled':True});cfg.setdefault('spotify',{})['enabled']=True;self.controller.config.save('integrations.json',cfg);self._log('Integraciones guardadas. Reinicia JARVIS para renovar Gemini.')
+        cfg=self.controller.config.load('integrations.json',{}) or {};cfg.setdefault('obs',{}).update({'host':self.ohost.text().strip() or '127.0.0.1','port':self.oport.value(),'enabled':True});cfg.setdefault('spotify',{})['enabled']=True;self.controller.config.save('integrations.json',cfg);self._log('Integraciones guardadas. Intentando conectar Gemini...');self.live.credentials_updated() if self.live else None
     def send_text(self):
         t=self.command.text().strip();self.command.clear()
         if t and self.live and self.loop:asyncio.run_coroutine_threadsafe(self.live.send_text(t),self.loop)
@@ -167,4 +167,6 @@ class MainWindow(QMainWindow):
     def _transcript(self,w,t):self.transcript.append(f'<span style="color:#00dfff"><b>{w}</b></span><br>{t}<br>')
     def _state(self,s):self.state.setText(s)
     def _level(self,v,rms):self.mic_meter.setValue(int(v));self.live_meter.setValue(int(v));self.orb.set_level(v)
-    def closeEvent(self,e):self.controller.close();super().closeEvent(e)
+    def closeEvent(self,e):
+        if self.live:self.live.request_stop()
+        self.controller.close();super().closeEvent(e)
