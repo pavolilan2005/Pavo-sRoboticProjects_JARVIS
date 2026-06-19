@@ -1,6 +1,7 @@
-# Pavo's Robotic Projects // JARVIS 3.2.0 HOLOMAP
+# Pavo's Robotic Projects // JARVIS 3.1.1
 
-Evolución visual y geoespacial construida sobre la rama limpia y estable 3.1.1. Conserva voz, audio, Spotify, OBS, rutinas, memoria y domótica, e incorpora una interfaz multipágina y un globo 3D controlable mediante voz.
+Versión de mantenimiento y limpieza basada en la rama estable 3.1.0.
+La interfaz, voz, Spotify, OBS, rutinas, memoria y domótica conservan su comportamiento; la estructura interna fue simplificada para continuar desarrollando sin duplicaciones peligrosas.
 
 ## Inicio rápido
 
@@ -31,8 +32,7 @@ PRPPlatform
         ├── Spotify / multimedia
         ├── OBS
         ├── Gmail / notificaciones
-        ├── ESP32 / domótica
-        └── HOLOMAP / navegación 3D
+        └── ESP32 / domótica
 ```
 
 Componentes principales:
@@ -40,34 +40,12 @@ Componentes principales:
 - `main.py`: sesión Gemini Live, audio y enlace entre la UI y el núcleo.
 - `ui.py`: interfaz futurista principal.
 - `control_center_ui.py`: configuración visual.
-- `map_ui.py`: interfaz del globo y controles holográficos.
-- `prp_core/adapters/navigation.py`: geocodificación, caché y lugares guardados.
-- `assets/map/cesium_prp.html`: escena CesiumJS del globo 3D.
 - `prp_core/`: capacidades, rutinas, modos, automatizaciones y adaptadores.
 - `prp_core/adapters/esp32.py`: **único propietario de los puertos seriales**.
 - `config/`: configuración persistente, separada del código.
 - `firmware/esp32_node/main.py`: firmware MicroPython configurable.
 
 Consulta `docs/ARQUITECTURA_PRP.md` para más detalles.
-
-## PRP Holographic Navigation
-
-Pulsa **HOLOMAP** en la ventana principal o usa:
-
-```text
-/map
-/map Pirámides de Giza
-```
-
-El módulo permite buscar lugares, volar a coordenadas, guardar puntos, fijar una ubicación principal, activar órbita automática y alternar entre estilo holográfico y calles. También responde a frases como:
-
-```text
-Jarvis, abre el mapa.
-Jarvis, llévame al CERN.
-Jarvis, regresa a la vista global.
-```
-
-Consulta `docs/HOLOMAP.md`.
 
 ## Domótica ESP32
 
@@ -143,14 +121,13 @@ Guarda las credenciales OAuth de escritorio en `config/gmail_credentials.json`. 
 /pc
 /mail
 /notifications
-/map Pirámides de Giza
 /audio
 /mic calibrate
 ```
 
 ## Migración
 
-`MIGRAR_DESDE_ANTERIOR.bat` copia únicamente datos compatibles: claves, memoria, audio, integraciones, nodos, dispositivos, escenas, rutinas, modos, automatizaciones y configuración del mapa. No copia archivos Python antiguos.
+`MIGRAR_DESDE_ANTERIOR.bat` copia únicamente datos compatibles: claves, memoria, audio, integraciones, nodos, dispositivos, escenas, rutinas, modos y automatizaciones. No copia archivos Python antiguos.
 
 ## Pruebas
 
@@ -174,5 +151,4 @@ No compartas:
 
 - Base funcional: 3.1.0
 - Limpieza estructural: 3.1.1
-- Interfaz y navegación holográfica: 3.2.0
-- Cambios detallados: `CHANGELOG_3.2.0_HOLOMAP.md`
+- Cambios detallados: `CHANGELOG_3.1.1_CLEANUP.md`

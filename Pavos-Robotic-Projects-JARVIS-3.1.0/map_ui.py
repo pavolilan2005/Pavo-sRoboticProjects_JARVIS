@@ -120,16 +120,36 @@ class CesiumMapView(QWidget):
             return
 
         self._view = QWebEngineView(self)
-        self._view.settings().setAttribute(
+        page = _MapPage(self._view)
+
+        # IMPORTANT: the settings belong to the QWebEnginePage that will render
+        # the local HTML. Setting them on QWebEngineView before setPage() only
+        # changes the temporary default page and the values are lost when the
+        # custom page is installed.
+        settings = page.settings()
+        settings.setAttribute(
             QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True
         )
-        page = _MapPage(self._view)
+        settings.setAttribute(
+            QWebEngineSettings.WebAttribute.JavascriptEnabled, True
+        )
+        settings.setAttribute(
+            QWebEngineSettings.WebAttribute.LocalStorageEnabled, True
+        )
+        settings.setAttribute(
+            QWebEngineSettings.WebAttribute.WebGLEnabled, True
+        )
+
         page.event_received.connect(self._on_event)
         self._view.setPage(page)
+
+        # Preserve Chromium's normal browser user-agent. Replacing it with a
+        # short custom string can make CDNs or security filters reject Cesium.
         try:
-            page.profile().setHttpUserAgent(
-                "PavosRoboticProjects-JARVIS/3.2.0 QtWebEngine HolographicNavigation"
-            )
+            profile = page.profile()
+            default_ua = profile.httpUserAgent()
+            if "PRP-JARVIS" not in default_ua:
+                profile.setHttpUserAgent(default_ua + " PRP-JARVIS/3.2.1")
         except Exception:
             pass
         self._view.loadFinished.connect(self._on_loaded)
@@ -138,6 +158,10 @@ class CesiumMapView(QWidget):
 
     def _on_loaded(self, ok: bool):
         if not ok:
+            self.event_received.emit(
+                "page_load_error",
+                {"message": "Qt WebEngine no pudo cargar la página local del mapa."},
+            )
             return
         self._ready = True
         for script in self._pending:
@@ -224,6 +248,7 @@ class HolographicMapWidget(QWidget):
         ml.setContentsMargins(3, 3, 3, 3)
         self.map_view.map_clicked.connect(self._on_map_clicked)
         self.map_view.map_ready.connect(lambda: self.set_status("GLOBO EN LÍNEA", GREEN))
+        self.map_view.event_received.connect(self._on_map_event)
         ml.addWidget(self.map_view)
         root.addWidget(map_frame, 1)
 
@@ -327,6 +352,14 @@ class HolographicMapWidget(QWidget):
         core_btn.clicked.connect(self.core_requested.emit)
         layout.addWidget(core_btn)
         return panel
+
+
+    def _on_map_event(self, event_type: str, payload: object):
+        if event_type in ("load_error", "page_load_error"):
+            message = "CESIUMJS NO DISPONIBLE"
+            if isinstance(payload, dict) and payload.get("message"):
+                message = str(payload.get("message"))
+            self.set_status(message, RED)
 
     def _emit_search(self):
         query = self._search.text().strip()

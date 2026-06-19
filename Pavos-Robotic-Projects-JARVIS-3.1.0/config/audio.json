@@ -2,7 +2,7 @@
   "version": 1,
   "input_device": 1,
   "output_device": 5,
-  "sensitivity": 32,
+  "sensitivity": 52,
   "input_gain": 1.5,
   "vad_enabled": true,
   "min_rms": 12.0,
