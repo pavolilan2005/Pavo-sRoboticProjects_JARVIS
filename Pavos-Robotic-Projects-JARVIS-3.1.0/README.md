@@ -152,3 +152,10 @@ No compartas:
 - Base funcional: 3.1.0
 - Limpieza estructural: 3.1.1
 - Cambios detallados: `CHANGELOG_3.1.1_CLEANUP.md`
+
+
+## HOLOMAP 3.2.2
+
+La versión 3.2.2 elimina el acceso directo a los servidores públicos de mosaicos
+de OpenStreetMap. La vista holográfica usa ArcGIS World Imagery, la vista de
+calles usa ArcGIS World Street Map y Natural Earth II funciona como respaldo.

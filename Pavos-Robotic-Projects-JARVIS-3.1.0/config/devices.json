@@ -4,24 +4,45 @@
     {
       "id": "foco",
       "name": "Foco",
-      "aliases": ["luz", "lámpara", "led", "foco del cuarto"],
-      "node": "esp32_principal",
-      "pin": 23,
-      "type": "digital_output",
-      "active_low": false,
-      "default_state": 0,
-      "capabilities": ["on", "off", "toggle", "status"]
-    },
-    {
-      "id": "ventilador",
-      "name": "Ventilador",
-      "aliases": ["ventilador del cuarto", "abanico", "fan"],
+      "aliases": [
+        "luz",
+        "lámpara",
+        "led",
+        "foco del cuarto",
+        "Foco"
+      ],
       "node": "esp32_principal",
       "pin": 2,
       "type": "digital_output",
       "active_low": false,
-      "default_state": 0,
-      "capabilities": ["on", "off", "toggle", "status"]
+      "capabilities": [
+        "on",
+        "off",
+        "toggle",
+        "status"
+      ],
+      "default_state": 0
+    },
+    {
+      "id": "ventilador",
+      "name": "Ventilador",
+      "aliases": [
+        "ventilador del cuarto",
+        "abanico",
+        "fan",
+        "Ventilador"
+      ],
+      "node": "esp32_principal",
+      "pin": 3,
+      "type": "digital_output",
+      "active_low": false,
+      "capabilities": [
+        "on",
+        "off",
+        "toggle",
+        "status"
+      ],
+      "default_state": 0
     }
   ]
 }

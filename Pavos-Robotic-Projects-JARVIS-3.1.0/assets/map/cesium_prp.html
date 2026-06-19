@@ -70,9 +70,8 @@
     sceneModePicker:false, baseLayerPicker:false, navigationHelpButton:false,
     fullscreenButton:false, infoBox:false, selectionIndicator:false,
     shouldAnimate:true, terrainProvider:new Cesium.EllipsoidTerrainProvider(),
-    baseLayer:new Cesium.ImageryLayer(new Cesium.OpenStreetMapImageryProvider({
-      url:'https://tile.openstreetmap.org/'
-    }))
+    baseLayer:false,
+    requestRenderMode:false
   });
   window.viewer = viewer;
   viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#020a12');
@@ -87,8 +86,98 @@
   viewer.scene.screenSpaceCameraController.minimumZoomDistance = 35;
   viewer.scene.screenSpaceCameraController.maximumZoomDistance = 45000000;
 
-  const base = viewer.imageryLayers.get(0);
-  if (base) { base.brightness=.48; base.contrast=1.55; base.saturation=.28; base.gamma=.82; base.hue=.48; }
+  const imageryLayers = viewer.imageryLayers;
+  const providerCache = {};
+  let base = null;
+  let activeBasemap = 'natural';
+
+  function styleLayer(layer, mode){
+    if(!layer) return;
+    if(mode === 'street'){
+      layer.brightness = .62;
+      layer.contrast = 1.34;
+      layer.saturation = .42;
+      layer.gamma = .92;
+      layer.hue = .46;
+    } else {
+      layer.brightness = .48;
+      layer.contrast = 1.55;
+      layer.saturation = .28;
+      layer.gamma = .82;
+      layer.hue = .48;
+    }
+  }
+
+  function naturalEarthProvider(){
+    return new Cesium.UrlTemplateImageryProvider({
+      url: Cesium.buildModuleUrl('Assets/Textures/NaturalEarthII') + '/{z}/{x}/{reverseY}.jpg',
+      tilingScheme: new Cesium.GeographicTilingScheme(),
+      maximumLevel: 5,
+      credit: 'Natural Earth II · Cesium'
+    });
+  }
+
+  function installFallback(){
+    if(base) return;
+    const provider = naturalEarthProvider();
+    base = imageryLayers.addImageryProvider(provider, 0);
+    activeBasemap = 'natural';
+    styleLayer(base, 'holo');
+    report('basemap_changed', {provider:'natural-earth', fallback:true});
+  }
+
+  async function getRemoteProvider(mode){
+    if(providerCache[mode]) return providerCache[mode];
+
+    const url = mode === 'street'
+      ? 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer'
+      : 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer';
+
+    const provider = await Cesium.ArcGisMapServerImageryProvider.fromUrl(url, {
+      enablePickFeatures: false
+    });
+    providerCache[mode] = provider;
+    return provider;
+  }
+
+  async function activateBasemap(mode){
+    const wanted = mode === 'street' ? 'street' : 'imagery';
+
+    try {
+      const provider = await getRemoteProvider(wanted);
+      const nextLayer = imageryLayers.addImageryProvider(provider, 0);
+      styleLayer(nextLayer, wanted);
+
+      const previous = base;
+      base = nextLayer;
+      activeBasemap = wanted;
+
+      if(previous){
+        imageryLayers.remove(previous, false);
+      }
+
+      document.getElementById('mode').textContent =
+        wanted === 'street' ? 'CARTOGRAFÍA TÁCTICA' : 'IMAGEN GLOBAL HOLOGRÁFICA';
+
+      report('basemap_changed', {
+        provider: wanted === 'street' ? 'arcgis-world-street-map' : 'arcgis-world-imagery',
+        fallback: false
+      });
+      return true;
+
+    } catch(error) {
+      installFallback();
+      document.getElementById('mode').textContent = 'MAPA LOCAL DE RESPALDO';
+      report('basemap_error', {
+        provider: wanted,
+        message: String(error && error.message ? error.message : error)
+      });
+      return false;
+    }
+  }
+
+  installFallback();
+  activateBasemap('imagery');
 
   let markerCounter = 0;
   let orbitEnabled = false;
@@ -145,10 +234,11 @@
     clearMarkers(){ viewer.entities.removeAll(); markerCounter=0; report('markers_cleared',{}); },
     setOrbit(enabled){ orbitEnabled=!!enabled; document.getElementById('mode').textContent=orbitEnabled?'ÓRBITA AUTOMÁTICA':'NAVEGACIÓN MANUAL'; },
     zoom(delta){ viewer.camera.zoomIn(Number(delta)||100000); },
-    setStreetStyle(enabled){
-      if(!base) return;
-      if(enabled){base.brightness=.75;base.contrast=1.18;base.saturation=.72;base.gamma=1.0;base.hue=0;}
-      else {base.brightness=.48;base.contrast=1.55;base.saturation=.28;base.gamma=.82;base.hue=.48;}
+    async setStreetStyle(enabled){
+      return await activateBasemap(enabled ? 'street' : 'imagery');
+    },
+    basemapStatus(){
+      return {active:activeBasemap, cached:Object.keys(providerCache)};
     },
     current(){
       const c=viewer.camera.positionCartographic;
