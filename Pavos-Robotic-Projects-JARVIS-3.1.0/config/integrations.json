@@ -1,10 +1,10 @@
 {
   "spotify": {
-    "enabled": false,
+    "enabled": true,
     "cache_path": "config/.spotify_cache"
   },
   "obs": {
-    "enabled": false,
+    "enabled": true,
     "host": "127.0.0.1",
     "port": 4455
   },
