@@ -15,5 +15,5 @@ def set_platform(platform) -> None:
 def get_platform():
     with _lock:
         if _platform is None:
-            raise RuntimeError("El núcleo NEXUS todavía no está inicializado.")
+            raise RuntimeError("El núcleo PRP todavía no está inicializado.")
         return _platform

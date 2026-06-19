@@ -5,7 +5,7 @@ from email.header import decode_header
 from pathlib import Path
 from typing import Any
 
-from mark_core.models import ActionResult
+from prp_core.models import ActionResult
 
 
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]

@@ -1301,7 +1301,7 @@ class MainWindow(QMainWindow):
         lay.addWidget(NeonSection("LÍNEA DE COMANDO", C.CYAN2))
         lay.addLayout(self._build_input_row())
 
-        control = QPushButton("CENTRO DE CONTROL NEXUS")
+        control = QPushButton("CENTRO DE CONTROL PRP")
         control.setFixedHeight(38)
         control.setCursor(Qt.CursorShape.PointingHandCursor)
         control.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
@@ -1598,7 +1598,7 @@ class MainWindow(QMainWindow):
 
     def _open_control_center(self):
         if self.platform is None:
-            self._log.append_log("SYS: El núcleo NEXUS todavía no está conectado.")
+            self._log.append_log("SYS: El núcleo PRP todavía no está conectado.")
             return
         try:
             from control_center_ui import ControlCenterDialog

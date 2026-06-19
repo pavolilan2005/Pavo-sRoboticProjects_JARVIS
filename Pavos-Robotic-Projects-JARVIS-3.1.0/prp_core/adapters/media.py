@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mark_core.models import ActionResult
+from prp_core.models import ActionResult
 
 
 class MediaAdapter:

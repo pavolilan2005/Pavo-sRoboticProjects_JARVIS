@@ -4,7 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
-from mark_core.storage import JsonStore
+from prp_core.storage import JsonStore
 
 try:
     import sounddevice as sd

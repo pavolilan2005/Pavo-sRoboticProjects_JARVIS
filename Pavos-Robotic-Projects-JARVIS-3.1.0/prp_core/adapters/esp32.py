@@ -8,10 +8,10 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from mark_core.models import ActionResult, RiskLevel
-from mark_core.storage import JsonStore
+from prp_core.models import ActionResult, RiskLevel
+from prp_core.storage import JsonStore
 
 try:
     import serial
@@ -49,7 +49,6 @@ DEFAULT_DEVICES = {
             "active_low": False,
             "default_state": 0,
             "capabilities": ["on", "off", "toggle", "status"],
-            "legacy_commands": {"on": "C", "off": "A", "toggle": "T", "status": "E"},
         },
         {
             "id": "ventilador",
@@ -89,8 +88,8 @@ class NodeConnection:
 class ESP32Adapter:
     """Configurable ESP32 node manager.
 
-    New nodes use newline-delimited JSON protocol ``jarvis-node-v1``. Existing
-    single-character firmware remains available through protocol ``legacy``.
+    Nodes use the newline-delimited JSON protocol ``jarvis-node-v1``.
+    This adapter is the only owner of serial ports in the desktop project.
     """
 
     VALID_TYPES = {"digital_output", "digital_input", "pwm_output", "analog_input"}
@@ -102,14 +101,10 @@ class ESP32Adapter:
         registry,
         event_bus,
         base_dir: Path,
-        legacy_controller: Callable[[dict[str, Any]], str] | None = None,
-        ui=None,
     ):
         self.registry = registry
         self.event_bus = event_bus
         self.base_dir = base_dir
-        self.ui = ui
-        self.legacy_controller = legacy_controller
         self.nodes_store = JsonStore(base_dir / "config" / "nodes.json", DEFAULT_NODES)
         self.devices_store = JsonStore(base_dir / "config" / "devices.json", DEFAULT_DEVICES)
         self.scenes_store = JsonStore(base_dir / "config" / "scenes.json", DEFAULT_SCENES)
@@ -301,8 +296,6 @@ class ESP32Adapter:
         node = self._get_node(node_id)
         if not node:
             return ActionResult.failure(f"No existe el nodo '{node_id}'.")
-        if node.get("protocol") == "legacy":
-            return ActionResult.success("El nodo legacy usa el enlace serial compatible existente.", node=node)
         if serial is None:
             return ActionResult.failure("PySerial no está instalado.")
         port = str(node.get("port", "")).strip()
@@ -330,6 +323,36 @@ class ESP32Adapter:
                 self._close_connection(conn)
                 return ActionResult.failure(f"No pude conectar {node.get('name')} en {port}: {exc}", error=str(exc))
 
+    def health_check(self, node_id: str) -> ActionResult:
+        """Ping one node without creating a second serial connection."""
+        connected = self.connect(node_id)
+        if not connected.ok:
+            return connected
+
+        node = self._get_node(node_id)
+        conn = self._connections.get(node_id)
+        if not node or not conn:
+            return ActionResult.failure(f"No existe una conexión activa para '{node_id}'.")
+
+        try:
+            reply = self._request(conn, {"op": "ping"}, timeout=1.5)
+            if not reply.get("ok", False):
+                raise RuntimeError(reply.get("error", reply.get("message", "ping rechazado")))
+            conn.last_seen = time.time()
+            conn.last_error = ""
+            return ActionResult.success(
+                f"{node.get('name', node_id)} en línea.",
+                node=node,
+                reply=reply,
+            )
+        except Exception as exc:
+            conn.last_error = str(exc)
+            self.disconnect(node_id)
+            return ActionResult.failure(
+                f"{node.get('name', node_id)} no respondió: {exc}",
+                error=str(exc),
+            )
+
     def disconnect(self, node_id: str) -> None:
         with self._connections_lock:
             conn = self._connections.pop(node_id, None)
@@ -348,8 +371,6 @@ class ESP32Adapter:
         node = self._get_node(node_id)
         if not node:
             return ActionResult.failure(f"No existe el nodo '{node_id}'.")
-        if node.get("protocol") == "legacy":
-            return ActionResult.failure("El firmware legacy no acepta configuración remota. Instala firmware/esp32_node/main.py para modificar pines sin reprogramar.")
         connected = self.connect(node_id)
         if not connected.ok:
             return connected
@@ -382,16 +403,6 @@ class ESP32Adapter:
         node = self._get_node(str(device.get("node")))
         if not node:
             return ActionResult.failure(f"El nodo de {device['name']} no existe.")
-
-        if node.get("protocol") == "legacy":
-            if not self.legacy_controller:
-                return ActionResult.failure("No hay controlador legacy conectado.")
-            try:
-                raw = self.legacy_controller({"device": device.get("id"), "action": action})
-                ok = not str(raw).lower().startswith(("no pude", "error"))
-                return ActionResult(ok, str(raw), data={"device": device, "action": action}).finish()
-            except Exception as exc:
-                return ActionResult.failure(f"Falló el controlador legacy: {exc}", error=str(exc))
 
         connected = self.connect(node["id"])
         if not connected.ok:

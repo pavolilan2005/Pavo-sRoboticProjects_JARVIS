@@ -5,16 +5,16 @@ import time
 import unittest
 from pathlib import Path
 
-from mark_core.capabilities import CapabilityRegistry
-from mark_core.event_bus import EventBus
-from mark_core.models import ActionResult
-from mark_core.routines import RoutineEngine
-from mark_core.modes import ModeManager
-from mark_core.automations import AutomationEngine
-from mark_core.adapters.esp32 import ESP32Adapter
+from prp_core.capabilities import CapabilityRegistry
+from prp_core.event_bus import EventBus
+from prp_core.models import ActionResult
+from prp_core.routines import RoutineEngine
+from prp_core.modes import ModeManager
+from prp_core.automations import AutomationEngine
+from prp_core.adapters.esp32 import ESP32Adapter
 
 
-class NexusCoreTests(unittest.TestCase):
+class PRPCoreTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.base = Path(self.temp.name)
@@ -105,29 +105,34 @@ class NexusCoreTests(unittest.TestCase):
             time.sleep(0.02)
         self.assertIn("event", self.values)
 
-    def test_esp32_device_registry_and_legacy_control(self):
-        adapter = ESP32Adapter(
-            self.registry,
-            self.bus,
-            self.base,
-            legacy_controller=lambda p: f"legacy:{p['device']}:{p['action']}",
-        )
+    def test_esp32_device_registry_and_alias_resolution(self):
+        adapter = ESP32Adapter(self.registry, self.bus, self.base)
         adapter.register()
-        adapter.nodes_store.save({"version": 1, "nodes": [{"id": "legacy", "name": "Legacy", "protocol": "legacy", "port": "COM1", "baudrate": 115200}]})
+        adapter.nodes_store.save({
+            "version": 1,
+            "nodes": [{
+                "id": "esp32_principal",
+                "name": "ESP32 Principal",
+                "protocol": "jarvis-node-v1",
+                "port": "COM1",
+                "baudrate": 115200,
+            }],
+        })
         adapter.devices_store.save({"version": 1, "devices": []})
         saved = adapter.save_device({
-            "id": "light", "name": "Light", "aliases": "luz, foco", "node": "legacy",
-            "pin": 23, "type": "digital_output", "active_low": False,
+            "id": "light", "name": "Light", "aliases": "luz, foco",
+            "node": "esp32_principal", "pin": 23,
+            "type": "digital_output", "active_low": False,
             "capabilities": "on, off, toggle, status",
         })
         self.assertEqual(saved["pin"], 23)
-        result = adapter.control({"device": "luz", "action": "on"})
-        self.assertTrue(result.ok)
+        self.assertEqual(adapter.get_device("la luz")["id"], "light")
         with self.assertRaises(ValueError):
             adapter.save_device({
-                "id": "bad", "name": "Bad", "node": "legacy", "pin": 23,
-                "type": "digital_output", "capabilities": "on",
+                "id": "bad", "name": "Bad", "node": "esp32_principal",
+                "pin": 23, "type": "digital_output", "capabilities": "on",
             })
+
 
 
 if __name__ == "__main__":

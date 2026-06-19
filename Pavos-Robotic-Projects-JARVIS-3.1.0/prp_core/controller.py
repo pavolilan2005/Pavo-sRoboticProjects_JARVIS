@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .automations import AutomationEngine
 from .capabilities import CapabilityRegistry
@@ -39,14 +39,13 @@ DEFAULT_INTEGRATIONS = {
 }
 
 
-class MarkPlatform:
-    """Central orchestration layer for MARK XXXIX NEXUS."""
+class PRPPlatform:
+    """Central orchestration layer for PAVO'S ROBOTIC PROJECTS // JARVIS."""
 
     def __init__(
         self,
         base_dir: str | Path,
         ui=None,
-        legacy_home_controller: Callable[[dict[str, Any]], str] | None = None,
     ):
         self.base_dir = Path(base_dir)
         self.ui = ui
@@ -68,8 +67,6 @@ class MarkPlatform:
             self.registry,
             self.event_bus,
             self.base_dir,
-            legacy_controller=legacy_home_controller,
-            ui=ui,
         )
 
         for adapter in (

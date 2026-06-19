@@ -9,7 +9,7 @@ from typing import Any
 
 import psutil
 
-from mark_core.models import ActionResult, RiskLevel
+from prp_core.models import ActionResult, RiskLevel
 
 
 class PCAdapter:

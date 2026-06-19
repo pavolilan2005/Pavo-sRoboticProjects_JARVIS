@@ -4,7 +4,7 @@ from typing import Any
 
 from actions.browser_control import browser_control
 from actions.open_app import open_app
-from mark_core.models import ActionResult
+from prp_core.models import ActionResult
 
 
 class AppsAdapter:

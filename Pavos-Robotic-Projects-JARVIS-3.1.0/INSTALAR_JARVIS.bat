@@ -20,7 +20,7 @@ if errorlevel 1 (
 )
 
 if not exist ".venv\Scripts\python.exe" (
-    echo Creando entorno virtual NEXUS...
+    echo Creando entorno virtual PRP...
     %BASEPY% -m venv .venv || goto :error
 )
 

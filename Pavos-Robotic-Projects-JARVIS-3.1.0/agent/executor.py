@@ -243,7 +243,7 @@ def _call_tool(tool: str, parameters: dict, speak: Callable | None) -> str:
         return flight_finder(parameters=parameters, player=None, speak=speak) or "Done."
 
     elif tool in {"run_routine", "manage_mode", "media_control", "obs_control", "pc_status", "email_center", "notification_center", "home_automation"}:
-        from mark_core.runtime import get_platform
+        from prp_core.runtime import get_platform
         result = get_platform().tool_call(tool, parameters)
         if not result.ok:
             raise RuntimeError(result.message)

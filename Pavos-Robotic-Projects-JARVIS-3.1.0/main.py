@@ -33,7 +33,7 @@ from ui import JarvisUI
 from memory.memory_manager import (
     load_memory, update_memory, format_memory_for_prompt,
 )
-from mark_core import MarkPlatform
+from prp_core import PRPPlatform
 
 from actions.file_processor import file_processor
 from actions.flight_finder     import flight_finder
@@ -52,12 +52,6 @@ from actions.dev_agent         import dev_agent
 from actions.web_search        import web_search as web_search_action
 from actions.computer_control  import computer_control
 from actions.game_updater      import game_updater
-
-try:
-    import serial
-except ImportError:
-    serial = None
-
 
 def get_base_dir():
     if getattr(sys, "frozen", False):
@@ -100,318 +94,8 @@ def _setup_logging() -> logging.Logger:
 
 LOGGER = _setup_logging()
 
-# --- ESP32 / Domótica serial settings ---------------------------------------
-ESP32_CONFIG_PATH = BASE_DIR / "config" / "esp32_serial.json"
-DOMOTICS_CONFIG_PATH = BASE_DIR / "config" / "domotics_devices.json"
-ESP32_BAUDRATE = int(os.getenv("JARVIS_ESP32_BAUDRATE", "115200"))
-ESP32_TIMEOUT = float(os.getenv("JARVIS_ESP32_TIMEOUT", "1.2"))
-ESP32_BOOT_WAIT = float(os.getenv("JARVIS_ESP32_BOOT_WAIT", "1.4"))
+# The ESP32 adapter in prp_core/adapters/esp32.py is the only serial owner.
 ESP32_HEALTH_INTERVAL = float(os.getenv("JARVIS_ESP32_HEALTH_INTERVAL", "10"))
-ESP32_AUTO_DETECT = os.getenv("JARVIS_ESP32_AUTO_DETECT", "1") != "0"
-
-DEFAULT_DOMOTICS_CONFIG = {
-    "devices": {
-        "foco": {
-            "aliases": ["foco", "luz", "luces", "lampara", "lámpara", "led"],
-            "commands": {"on": "C", "off": "A", "toggle": "T", "status": "E"},
-            "responses": {
-                "ACK:FOCO_ON": "Foco encendido.",
-                "ACK:FOCO_OFF": "Foco apagado.",
-                "ESTADO:FOCO_ON": "El foco está encendido.",
-                "ESTADO:FOCO_OFF": "El foco está apagado."
-            }
-        }
-    }
-}
-
-ACTION_ALIASES = {
-    "on": "on", "prender": "on", "prende": "on", "encender": "on",
-    "enciende": "on", "activar": "on", "activa": "on",
-    "off": "off", "apagar": "off", "apaga": "off",
-    "desactivar": "off", "desactiva": "off",
-    "toggle": "toggle", "cambiar": "toggle", "cambia": "toggle",
-    "alternar": "toggle", "estado": "status", "status": "status",
-    "consultar": "status", "revisar": "status",
-}
-
-
-def _atomic_write_json(path: Path, data: dict) -> None:
-    """Write JSON without risking a half-written configuration file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_suffix(path.suffix + ".tmp")
-    temp_path.write_text(
-        json.dumps(data, indent=4, ensure_ascii=False), encoding="utf-8"
-    )
-    temp_path.replace(path)
-
-
-def _load_saved_esp32_port() -> str:
-    env_port = os.getenv("JARVIS_ESP32_PORT", "").strip()
-    if env_port:
-        return env_port
-    try:
-        if ESP32_CONFIG_PATH.exists():
-            data = json.loads(ESP32_CONFIG_PATH.read_text(encoding="utf-8"))
-            return str(data.get("port", "")).strip()
-    except Exception as exc:
-        LOGGER.warning("Could not read ESP32 config: %s", exc)
-    return "COM6"
-
-
-ESP32_PORT = _load_saved_esp32_port()
-_esp32_serial = None
-_esp32_lock = threading.RLock()
-
-
-def _save_esp32_port(port: str) -> None:
-    try:
-        _atomic_write_json(ESP32_CONFIG_PATH, {"port": port})
-    except Exception as exc:
-        LOGGER.warning("Could not save ESP32 port: %s", exc)
-
-
-def _load_domotics_config() -> dict:
-    try:
-        if DOMOTICS_CONFIG_PATH.exists():
-            loaded = json.loads(DOMOTICS_CONFIG_PATH.read_text(encoding="utf-8"))
-            if isinstance(loaded.get("devices"), dict):
-                return loaded
-    except Exception as exc:
-        LOGGER.warning("Invalid domotics config, using defaults: %s", exc)
-    return DEFAULT_DOMOTICS_CONFIG
-
-
-def _dispatch_ui(player, method: str, *args) -> None:
-    """Use JarvisLive's UI queue when available; otherwise call defensively."""
-    if player is None:
-        return
-    dispatcher = getattr(player, "_jarvis_dispatch", None)
-    if callable(dispatcher):
-        dispatcher(method, *args)
-        return
-    fn = getattr(player, method, None)
-    if callable(fn):
-        try:
-            fn(*args)
-        except Exception:
-            LOGGER.debug("UI call failed: %s", method, exc_info=True)
-
-
-def _list_esp32_ports() -> list[dict[str, str]]:
-    """Return available serial ports with enough metadata for auto-detection."""
-    if serial is None:
-        return []
-    try:
-        from serial.tools import list_ports
-        return [
-            {
-                "port": p.device,
-                "description": p.description or p.device,
-                "hwid": p.hwid or "",
-                "manufacturer": p.manufacturer or "",
-            }
-            for p in list_ports.comports()
-        ]
-    except Exception as exc:
-        LOGGER.warning("Could not enumerate serial ports: %s", exc)
-        return []
-
-
-def _autodetect_esp32_port() -> str | None:
-    ports = _list_esp32_ports()
-    if not ports:
-        return None
-
-    available = {p["port"] for p in ports}
-    if ESP32_PORT in available:
-        return ESP32_PORT
-    if not ESP32_AUTO_DETECT:
-        return None
-
-    keywords = (
-        "cp210", "ch340", "ch341", "usb serial", "silicon labs",
-        "wch", "uart", "esp32", "ftdi",
-    )
-    ranked: list[tuple[int, str]] = []
-    for p in ports:
-        haystack = " ".join(
-            (p.get("description", ""), p.get("hwid", ""), p.get("manufacturer", ""))
-        ).lower()
-        score = sum(1 for word in keywords if word in haystack)
-        ranked.append((score, p["port"]))
-
-    ranked.sort(reverse=True)
-    if ranked and ranked[0][0] > 0:
-        return ranked[0][1]
-    if len(ports) == 1:
-        return ports[0]["port"]
-    return None
-
-
-def _set_esp32_port(port: str) -> str:
-    """Change the selected ESP32 serial port and force a reconnect."""
-    global ESP32_PORT, _esp32_serial
-    port = (port or "").strip()
-    if not port:
-        return "Puerto inválido."
-
-    with _esp32_lock:
-        try:
-            if _esp32_serial is not None and _esp32_serial.is_open:
-                _esp32_serial.close()
-        except Exception:
-            LOGGER.debug("Error closing previous serial port", exc_info=True)
-        _esp32_serial = None
-        ESP32_PORT = port
-        _save_esp32_port(port)
-    return f"Puerto ESP32 seleccionado: {ESP32_PORT}"
-
-
-def _set_ui_esp32_status(player, status: str, message: str = "") -> None:
-    _dispatch_ui(player, "set_esp32_status", status, ESP32_PORT, message)
-
-
-def _close_esp32() -> None:
-    global _esp32_serial
-    with _esp32_lock:
-        try:
-            if _esp32_serial is not None and _esp32_serial.is_open:
-                _esp32_serial.close()
-        except Exception:
-            LOGGER.debug("Error closing ESP32 serial port", exc_info=True)
-        finally:
-            _esp32_serial = None
-
-
-def _connect_esp32() -> tuple[bool, str]:
-    """Open/reopen the USB serial link with automatic port recovery."""
-    global ESP32_PORT, _esp32_serial
-
-    if serial is None:
-        return False, "PySerial no está instalado. Ejecuta: pip install pyserial"
-
-    with _esp32_lock:
-        try:
-            if _esp32_serial is not None and _esp32_serial.is_open:
-                return True, f"ESP32 ya conectada en {ESP32_PORT}"
-
-            detected_port = _autodetect_esp32_port()
-            if detected_port and detected_port != ESP32_PORT:
-                ESP32_PORT = detected_port
-                _save_esp32_port(ESP32_PORT)
-                LOGGER.info("ESP32 port auto-detected: %s", ESP32_PORT)
-
-            _esp32_serial = serial.Serial(
-                ESP32_PORT,
-                ESP32_BAUDRATE,
-                timeout=0.12,
-                write_timeout=0.5,
-            )
-            time.sleep(ESP32_BOOT_WAIT)
-            _esp32_serial.reset_input_buffer()
-            _esp32_serial.reset_output_buffer()
-            return True, f"ESP32 conectada en {ESP32_PORT}"
-
-        except Exception as exc:
-            _close_esp32()
-            return False, f"No se pudo conectar con la ESP32 en {ESP32_PORT}: {exc}"
-
-
-def _send_esp32_command(
-    command: str,
-    wait_seconds: float = ESP32_TIMEOUT,
-    player=None,
-    *,
-    show_connecting: bool = True,
-) -> tuple[bool, str]:
-    """Send a command and wait for ACK/ESTADO/ERR without stale serial data."""
-    global _esp32_serial
-
-    command = (command or "").strip()
-    if not command:
-        return False, "COMANDO_ESP32_VACIO"
-
-    if show_connecting:
-        _set_ui_esp32_status(player, "CONNECTING", "probando enlace serial")
-
-    ok, msg = _connect_esp32()
-    if not ok:
-        _set_ui_esp32_status(player, "DISCONNECTED", msg)
-        return False, msg
-
-    with _esp32_lock:
-        try:
-            _esp32_serial.reset_input_buffer()
-            _esp32_serial.write(command.encode("utf-8"))
-            _esp32_serial.flush()
-
-            lines: list[str] = []
-            deadline = time.monotonic() + max(0.1, wait_seconds)
-            while time.monotonic() < deadline:
-                if _esp32_serial.in_waiting:
-                    line = _esp32_serial.readline().decode("utf-8", errors="ignore").strip()
-                    if line:
-                        lines.append(line)
-                        if line.startswith(("ACK:", "ESTADO:", "ERR:")):
-                            break
-                else:
-                    time.sleep(0.02)
-
-            if not lines:
-                _close_esp32()
-                msg = "SIN_RESPUESTA_DE_ESP32"
-                _set_ui_esp32_status(player, "DISCONNECTED", msg)
-                return False, msg
-
-            response = "\n".join(lines)
-            _set_ui_esp32_status(player, "ONLINE", response)
-            return (not response.startswith("ERR:")), response
-
-        except Exception as exc:
-            _close_esp32()
-            msg = f"ERROR_SERIAL_ESP32: {exc}"
-            _set_ui_esp32_status(player, "DISCONNECTED", msg)
-            return False, msg
-
-
-def home_automation(parameters: dict, player=None) -> str:
-    """Tool backend for Jarvis → PC → ESP32 domotics control."""
-    raw_device = _normalize_for_matching(str(parameters.get("device", "foco") or "foco"))
-    raw_action = _normalize_for_matching(str(parameters.get("action", "toggle") or "toggle"))
-    action = ACTION_ALIASES.get(raw_action, raw_action)
-
-    config = _load_domotics_config()
-    selected_name = None
-    selected_device = None
-    for name, device_cfg in config.get("devices", {}).items():
-        aliases = {_normalize_for_matching(name)}
-        aliases.update(_normalize_for_matching(a) for a in device_cfg.get("aliases", []))
-        if raw_device in aliases:
-            selected_name = name
-            selected_device = device_cfg
-            break
-
-    if not selected_device:
-        available = ", ".join(sorted(config.get("devices", {}).keys())) or "ninguno"
-        return f"Dispositivo no configurado: {raw_device}. Disponibles: {available}."
-
-    command = selected_device.get("commands", {}).get(action)
-    if not command:
-        return f"Acción no configurada para {selected_name}: {action}."
-
-    ok, response = _send_esp32_command(command, player=player)
-    _dispatch_ui(player, "write_log", f"ESP32 <= {command} | ESP32 => {response}")
-
-    if not ok:
-        return f"No pude comunicarme con la ESP32. {response}"
-
-    responses = selected_device.get("responses", {})
-    for prefix, friendly_text in responses.items():
-        if prefix in response:
-            return friendly_text
-    if "ERR:" in response:
-        return f"La ESP32 rechazó el comando: {response}"
-    return f"La ESP32 respondió: {response}"
 
 
 def _get_api_key() -> str:
@@ -895,7 +579,7 @@ TOOL_DECLARATIONS = [
         "name": "run_routine",
         "description": (
             "Runs a configured multi-step routine such as Modo Stream, Modo Estudio, "
-            "or any routine created in the NEXUS Control Center. Use this instead of "
+            "or any routine created in the PRP Control Center. Use this instead of "
             "calling many individual tools when the user requests a known routine."
         ),
         "parameters": {
@@ -1238,13 +922,9 @@ class JarvisLive:
         if hasattr(self.ui, "on_esp32_refresh_ports"):
             self.ui.on_esp32_refresh_ports = self._on_esp32_refresh_ports
 
-        # NEXUS orchestration core. The legacy serial controller is retained so
-        # current ESP32 firmware keeps working while new nodes use JSON config.
-        self.platform = MarkPlatform(
-            BASE_DIR,
-            ui=self.ui,
-            legacy_home_controller=lambda params: home_automation(params, player=self.ui),
-        )
+        # PRP orchestration core. It is the sole owner of integrations,
+        # including every ESP32 serial connection.
+        self.platform = PRPPlatform(BASE_DIR, ui=self.ui)
         self.platform.audio.bind_runtime(
             apply_callback=self._on_audio_settings_changed,
             calibrate_callback=self._request_mic_calibration,
@@ -1254,8 +934,13 @@ class JarvisLive:
         if hasattr(self.ui, "attach_platform"):
             self.ui.attach_platform(self.platform)
 
-        self._ui_call("update_esp32_ports", _list_esp32_ports(), ESP32_PORT)
-        self._ui_call("set_esp32_status", "UNKNOWN", ESP32_PORT, "sin verificar")
+        current_port = self._current_esp32_port()
+        self._ui_call(
+            "update_esp32_ports",
+            self.platform.esp32.list_ports(),
+            current_port,
+        )
+        self._ui_call("set_esp32_status", "UNKNOWN", current_port, "sin verificar")
 
     def _prepare_audio_runtime(self) -> None:
         settings = self.platform.audio.load()
@@ -1382,6 +1067,39 @@ class JarvisLive:
     def _ui_state(self, state: str) -> None:
         self._ui_call("set_state", state)
 
+    def _current_esp32_node(self) -> dict | None:
+        nodes = self.platform.esp32.list_nodes()
+        enabled = [node for node in nodes if node.get("enabled", True)]
+        return (enabled or nodes or [None])[0]
+
+    def _current_esp32_port(self) -> str:
+        node = self._current_esp32_node()
+        return str((node or {}).get("port", "")).strip() or "--"
+
+    def _save_selected_esp32_port(self, port: str) -> dict:
+        port = str(port or "").strip()
+        if not port:
+            raise ValueError("Puerto serial vacío.")
+
+        nodes = self.platform.esp32.list_nodes()
+        node = next(
+            (item for item in nodes if str(item.get("port", "")).upper() == port.upper()),
+            None,
+        )
+        if node is None:
+            node = self._current_esp32_node() or {
+                "id": "esp32_principal",
+                "name": "ESP32 Principal",
+                "transport": "serial",
+                "protocol": "jarvis-node-v1",
+                "baudrate": 115200,
+                "enabled": True,
+            }
+            node = dict(node)
+            node["port"] = port
+            node = self.platform.esp32.save_node(node)
+        return node
+
     def _current_mic_threshold(self) -> float:
         return max(
             self._mic_min_rms,
@@ -1447,7 +1165,7 @@ class JarvisLive:
         elif command == "/status":
             self._ui_log(
                 f"SYS: state={self._idle_state()} | session={'online' if self.session else 'offline'} "
-                f"| ESP32={ESP32_PORT} | mic_threshold={self._current_mic_threshold():.1f} "
+                f"| ESP32={self._current_esp32_port()} | mic_threshold={self._current_mic_threshold():.1f} "
                 f"| audio={RECEIVE_SAMPLE_RATE}->{self._output_sample_rate}Hz "
                 f"| mic={self._input_device_name}"
             )
@@ -1459,7 +1177,7 @@ class JarvisLive:
             if value:
                 self._on_esp32_connect(value)
             else:
-                self._on_esp32_connect(ESP32_PORT)
+                self._on_esp32_connect(self._current_esp32_port())
         elif command == "/sleep":
             self._force_sleep("local command")
         elif command == "/wake":
@@ -1483,11 +1201,11 @@ class JarvisLive:
                 threading.Thread(
                     target=worker, name="LocalDomotics", daemon=True
                 ).start()
-        elif command in {"/control", "/nexus"}:
+        elif command in {"/control", "/prp"}:
             self._ui_call("open_control_center")
         elif command in {"/routines", "/rutinas"}:
             names = ", ".join(r.get("name", r.get("id", "")) for r in self.platform.routines.list())
-            self._ui_log(f"NEXUS: Rutinas disponibles: {names or 'ninguna'}")
+            self._ui_log(f"PRP: Rutinas disponibles: {names or 'ninguna'}")
         elif command in {"/routine", "/rutina"}:
             if not value:
                 self._ui_log("SYS: Uso: /routine modo stream")
@@ -1554,12 +1272,12 @@ class JarvisLive:
                 warnings_list = getattr(result, "warnings", []) or []
                 if warnings_list:
                     message += " | " + " | ".join(str(w) for w in warnings_list)
-                self._ui_log(f"NEXUS: {message}")
+                self._ui_log(f"PRP: {message}")
                 if self.session and message:
                     self.speak(message)
             except Exception as exc:
-                self._ui_log(f"ERR: NEXUS — {exc}")
-        threading.Thread(target=worker, name="NexusLocal", daemon=True).start()
+                self._ui_log(f"ERR: PRP — {exc}")
+        threading.Thread(target=worker, name="PRPLocal", daemon=True).start()
 
     def _on_text_command(self, text: str):
         text = (text or "").strip()
@@ -1604,36 +1322,33 @@ class JarvisLive:
             await self._send_text(text)
 
     def _on_esp32_refresh_ports(self):
-        ports = _list_esp32_ports()
-        self._ui_call("update_esp32_ports", ports, ESP32_PORT)
+        ports = self.platform.esp32.list_ports()
+        self._ui_call("update_esp32_ports", ports, self._current_esp32_port())
         return ports
 
     def _on_esp32_connect(self, port: str):
-        msg = _set_esp32_port(port)
-        self._ui_log(f"SYS: {msg}")
-        self._ui_call("set_esp32_status", "CONNECTING", ESP32_PORT, "probando enlace serial")
+        try:
+            node = self._save_selected_esp32_port(port)
+        except Exception as exc:
+            self._ui_call("set_esp32_status", "DISCONNECTED", str(port or "--"), str(exc))
+            self._ui_log(f"ERR: No se pudo guardar el puerto ESP32: {exc}")
+            return
+
+        selected_port = str(node.get("port", "--"))
+        node_id = str(node.get("id", "esp32_principal"))
+        self._ui_log(f"SYS: Puerto ESP32 seleccionado: {selected_port}")
+        self._ui_call("set_esp32_status", "CONNECTING", selected_port, "probando enlace serial")
 
         def worker():
-            matching = next(
-                (node for node in self.platform.esp32.list_nodes()
-                 if str(node.get("port", "")).upper() == ESP32_PORT.upper()),
-                None,
+            result = self.platform.esp32.connect(node_id)
+            self._ui_call(
+                "set_esp32_status",
+                "ONLINE" if result.ok else "DISCONNECTED",
+                selected_port,
+                result.message,
             )
-            if matching and matching.get("protocol") != "legacy":
-                action_result = self.platform.esp32.connect(str(matching.get("id")))
-                ok, response = action_result.ok, action_result.message
-                self._ui_call(
-                    "set_esp32_status",
-                    "ONLINE" if ok else "DISCONNECTED",
-                    ESP32_PORT,
-                    response,
-                )
-            else:
-                ok, response = _send_esp32_command(
-                    "E", wait_seconds=2.0, player=self.ui, show_connecting=False
-                )
-            state = "en línea" if ok else "desconectada"
-            self._ui_log(f"ESP32: {state} en {ESP32_PORT} — {response}")
+            state = "en línea" if result.ok else "desconectada"
+            self._ui_log(f"ESP32: {state} en {selected_port} — {result.message}")
 
         threading.Thread(target=worker, name="ESP32Connect", daemon=True).start()
 
@@ -1842,7 +1557,7 @@ class JarvisLive:
         )
 
         nexus_protocol = (
-            "[NEXUS ROUTINES, MODES AND SERVICES]\n"
+            "[PRP ROUTINES, MODES AND SERVICES]\n"
             "Use run_routine when the user requests a configured multi-step routine such as mode stream. "
             "Use manage_mode for persistent modes that remain active and monitor the environment. "
             "Use media_control for Spotify, songs, playlists, playback and volume. "
@@ -2049,7 +1764,7 @@ class JarvisLive:
                     try:
                         self.platform.shutdown()
                     except Exception:
-                        LOGGER.debug("NEXUS shutdown cleanup failed", exc_info=True)
+                        LOGGER.debug("PRP core shutdown cleanup failed", exc_info=True)
                     os._exit(0)
                 threading.Thread(target=_shutdown, daemon=True).start()
 
@@ -2074,35 +1789,36 @@ class JarvisLive:
         await asyncio.sleep(1.0)
         while True:
             try:
-                self._ui_call("update_esp32_ports", _list_esp32_ports(), ESP32_PORT)
-                matching = next(
-                    (node for node in self.platform.esp32.list_nodes()
-                     if str(node.get("port", "")).upper() == ESP32_PORT.upper()),
-                    None,
-                )
-                if matching and matching.get("protocol") != "legacy":
-                    action_result = await asyncio.to_thread(
-                        self.platform.esp32.connect, str(matching.get("id"))
+                ports = self.platform.esp32.list_ports()
+                node = self._current_esp32_node()
+                port = str((node or {}).get("port", "")).strip() or "--"
+                self._ui_call("update_esp32_ports", ports, port)
+
+                if node and node.get("enabled", True):
+                    result = await asyncio.to_thread(
+                        self.platform.esp32.health_check,
+                        str(node.get("id")),
                     )
-                    ok, response = action_result.ok, action_result.message
                     self._ui_call(
                         "set_esp32_status",
-                        "ONLINE" if ok else "DISCONNECTED",
-                        ESP32_PORT,
-                        response,
+                        "ONLINE" if result.ok else "DISCONNECTED",
+                        port,
+                        result.message,
                     )
                 else:
-                    ok, response = await asyncio.to_thread(
-                        _send_esp32_command,
-                        "E",
-                        0.9,
-                        self.ui,
-                        show_connecting=False,
+                    self._ui_call(
+                        "set_esp32_status",
+                        "UNKNOWN",
+                        port,
+                        "no hay un nodo ESP32 habilitado",
                     )
-                    if not ok:
-                        self._ui_call("set_esp32_status", "DISCONNECTED", ESP32_PORT, response)
             except Exception as exc:
-                self._ui_call("set_esp32_status", "DISCONNECTED", ESP32_PORT, str(exc))
+                self._ui_call(
+                    "set_esp32_status",
+                    "DISCONNECTED",
+                    self._current_esp32_port(),
+                    str(exc),
+                )
                 LOGGER.warning("ESP32 watchdog error: %s", exc)
             await asyncio.sleep(max(3.0, ESP32_HEALTH_INTERVAL))
 
@@ -2525,8 +2241,7 @@ def main():
     try:
         jarvis.platform.shutdown()
     except Exception:
-        LOGGER.debug("NEXUS shutdown cleanup failed", exc_info=True)
-    _close_esp32()
+        LOGGER.debug("PRP core shutdown cleanup failed", exc_info=True)
 
 
 if __name__ == "__main__":

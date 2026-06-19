@@ -1,14 +1,16 @@
-# Primera prueba de MARK XXXIX NEXUS
+# Primera prueba de PRP JARVIS 3.1.1
 
 1. Ejecuta `DIAGNOSTICO_JARVIS.bat`.
-2. Inicia JARVIS y espera `JARVIS online`.
-3. Abre **CENTRO DE CONTROL NEXUS**.
-4. En INICIO confirma que aparecen capacidades, rutinas y modos.
-5. Ejecuta la rutina `modo_estudio`; los pasos no configurados deben aparecer como advertencias, no cerrar la aplicación.
-6. Ejecuta `/pc` y `/media play`.
-7. Configura OBS y usa `/obs status`.
-8. Conecta la ESP32, registra un nodo y un dispositivo, guarda y sincroniza.
-9. Ejecuta `/home foco status`, `/home foco on` y `/home foco off`.
-10. Activa Modo Stream y verifica el resumen de pasos en ACTIVIDAD.
+2. Inicia JARVIS y espera el estado `STANDBY`.
+3. Comprueba el medidor de micrófono y di “Jarvis” con voz normal.
+4. Abre **CENTRO DE CONTROL PRP**.
+5. En AUDIO confirma el micrófono y salida seleccionados.
+6. En NODOS ESP32 verifica puerto, baudrate y protocolo `jarvis-node-v1`.
+7. Pulsa conectar y después **GUARDAR + SINCRONIZAR** en DISPOSITIVOS.
+8. Prueba manualmente `ENCENDER`, `ESTADO`, `APAGAR` y `ALTERNAR`.
+9. Ejecuta `/home foco on` y una orden equivalente por voz.
+10. Prueba Spotify, OBS y una rutina sin cerrar JARVIS.
+11. Desconecta y reconecta la ESP32 una vez.
+12. Déjalo abierto al menos 30 minutos y revisa `logs/jarvis.log`.
 
-No inicies una transmisión real hasta verificar escena, fuentes y credenciales. La acción de iniciar stream requiere confirmación.
+No deberían aparecer conexiones COM duplicadas, `PermissionError`, `Event loop is closed`, `ExceptionGroup` ni tracebacks repetitivos.

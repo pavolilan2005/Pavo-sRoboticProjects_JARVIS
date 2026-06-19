@@ -19,3 +19,7 @@ config/gmail_credentials.json
 config/gmail_token.json
 config/spotify_cache*
 logs/*.log
+*.tmp
+*.bak
+*.orig
+config/.spotify_cache*

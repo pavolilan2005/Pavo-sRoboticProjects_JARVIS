@@ -1,6 +1,6 @@
 # Pavo's Robotic Projects // JARVIS 3.1.0
 
-Esta versión parte directamente de la base funcional de **MARK XXXIX NEXUS 3.0.0** y añade únicamente dos bloques principales, sin reemplazar el resto del sistema.
+Esta versión parte directamente de la base funcional de **PAVO'S ROBOTIC PROJECTS // JARVIS 3.0.0** y añade únicamente dos bloques principales, sin reemplazar el resto del sistema.
 
 ## Menú de audio
 

@@ -4,10 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mark_core.adapters.audio import AudioSettingsAdapter
-from mark_core.adapters.esp32 import ESP32Adapter
-from mark_core.capabilities import CapabilityRegistry
-from mark_core.event_bus import EventBus
+from prp_core.adapters.audio import AudioSettingsAdapter
+from prp_core.adapters.esp32 import ESP32Adapter
+from prp_core.capabilities import CapabilityRegistry
+from prp_core.event_bus import EventBus
 
 
 class AudioAndDynamicDomoticsTests(unittest.TestCase):

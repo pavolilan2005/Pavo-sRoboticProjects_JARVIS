@@ -6,7 +6,7 @@
       "name": "ESP32 Principal",
       "transport": "serial",
       "protocol": "jarvis-node-v1",
-      "port": "COM6",
+      "port": "COM5",
       "baudrate": 115200,
       "enabled": true
     }

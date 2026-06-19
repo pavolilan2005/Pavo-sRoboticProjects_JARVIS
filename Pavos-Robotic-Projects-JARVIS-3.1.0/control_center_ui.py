@@ -280,7 +280,7 @@ class ControlCenterDialog(QDialog):
     def _build_nodes(self) -> QWidget:
         page = QWidget()
         lay = QVBoxLayout(page)
-        info = QLabel("Cada nodo representa una ESP32. Usa 'legacy' para tu firmware actual o 'jarvis-node-v1' para configurar pines desde aquí.")
+        info = QLabel("Cada nodo representa una ESP32 con protocolo 'jarvis-node-v1'. La conexión serial pertenece únicamente al núcleo PRP.")
         info.setWordWrap(True)
         info.setStyleSheet(f"color:{DIM};")
         lay.addWidget(info)
@@ -471,10 +471,6 @@ class ControlCenterDialog(QDialog):
         def worker():
             messages = []
             for node_id in sorted(node_ids):
-                node = next((item for item in self.platform.esp32.list_nodes() if item.get("id") == node_id), None)
-                if node and node.get("protocol") == "legacy":
-                    messages.append(f"{node_id}: firmware legacy, no admite sincronización remota")
-                    continue
                 result = self.platform.execute("esp32.sync", {"node": node_id}, confirmed=True)
                 messages.append(result.message)
             return " | ".join(messages)
