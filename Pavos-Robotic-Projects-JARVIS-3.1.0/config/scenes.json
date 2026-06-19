@@ -1,35 +1,6 @@
 {
-  "version": 1,
   "scenes": [
-    {
-      "id": "normal",
-      "name": "Normal",
-      "targets": [
-        {
-          "device": "ventilador",
-          "action": "off"
-        }
-      ]
-    },
-    {
-      "id": "stream",
-      "name": "Stream",
-      "targets": [
-        {
-          "device": "ventilador",
-          "action": "on"
-        }
-      ]
-    },
-    {
-      "id": "estudio",
-      "name": "Estudio",
-      "targets": [
-        {
-          "device": "ventilador",
-          "action": "on"
-        }
-      ]
-    }
+    {"id": "stream", "name": "Iluminación Stream", "devices": {}},
+    {"id": "normal", "name": "Iluminación Normal", "devices": {}}
   ]
 }

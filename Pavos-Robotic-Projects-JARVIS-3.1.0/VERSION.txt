@@ -1,2 +1,1 @@
-Pavo's Robotic Projects // JARVIS
-3.1.0 Versión Estable
+1.0.0

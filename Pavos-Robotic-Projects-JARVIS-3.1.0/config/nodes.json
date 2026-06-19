@@ -1,14 +1,3 @@
 {
-  "version": 1,
-  "nodes": [
-    {
-      "id": "esp32_principal",
-      "name": "ESP32 Principal",
-      "port": "COM6",
-      "baudrate": 115200,
-      "protocol": "jarvis-node-v1",
-      "enabled": true,
-      "transport": "serial"
-    }
-  ]
+  "nodes": []
 }

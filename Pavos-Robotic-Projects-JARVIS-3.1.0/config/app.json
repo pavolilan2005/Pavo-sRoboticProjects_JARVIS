@@ -1,0 +1,22 @@
+{
+  "brand": "Pavo's Robotic Projects",
+  "assistant_name": "Jarvis",
+  "language": "es-MX",
+  "gemini_model": "models/gemini-2.5-flash-native-audio-preview-12-2025",
+  "wake_words": ["jarvis", "jervis", "yarvis", "arvis", "gervis"],
+  "awake_window_seconds": 30,
+  "followup_window_seconds": 20,
+  "microphone": {
+    "device": null,
+    "sample_rate": 16000,
+    "chunk_size": 1024,
+    "sensitivity": 78,
+    "calibration_seconds": 1.5,
+    "preroll_ms": 550,
+    "speech_tail_ms": 1100
+  },
+  "audio_output": {
+    "device": null,
+    "gemini_sample_rate": 24000
+  }
+}
