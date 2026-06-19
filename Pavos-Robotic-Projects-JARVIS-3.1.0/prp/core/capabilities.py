@@ -1,33 +1,28 @@
 from __future__ import annotations
 import asyncio
-from typing import Any
-from .models import ActionResult, Capability
+from dataclasses import dataclass
+from typing import Any,Callable
+
+@dataclass(slots=True)
+class Result:
+    ok:bool
+    message:str
+    data:dict[str,Any]|None=None
 
 class CapabilityRegistry:
-    def __init__(self):
-        self._items: dict[str, Capability] = {}
-
-    def register(self, capability: Capability) -> None:
-        if capability.name in self._items:
-            raise ValueError(f"Capacidad duplicada: {capability.name}")
-        self._items[capability.name] = capability
-
-    def list(self) -> list[Capability]:
-        return sorted(self._items.values(), key=lambda item: item.name)
-
-    def get(self, name: str) -> Capability | None:
-        return self._items.get(name)
-
-    async def execute(self, name: str, args: dict[str, Any] | None = None) -> ActionResult:
-        capability = self.get(name)
-        if not capability:
-            return ActionResult.failure(f"Capacidad desconocida: {name}")
+    def __init__(self): self._items:dict[str,tuple[Callable,str]]={}
+    def register(self,name:str,handler:Callable,description:str=''):
+        if name in self._items: raise ValueError(f'Capacidad duplicada: {name}')
+        self._items[name]=(handler,description)
+    async def execute(self,name:str,args:dict|None=None)->Result:
+        if name not in self._items: return Result(False,f'Capacidad desconocida: {name}')
+        fn,_=self._items[name]
         try:
-            result = capability.handler(**(args or {}))
-            if asyncio.iscoroutine(result):
-                result = await result
-            if isinstance(result, ActionResult):
-                return result
-            return ActionResult.success(str(result) if result is not None else "Completado")
-        except Exception as exc:
-            return ActionResult.failure(f"Falló {name}", error=f"{type(exc).__name__}: {exc}")
+            out=fn(**(args or {}))
+            if asyncio.iscoroutine(out): out=await out
+            if isinstance(out,Result): return out
+            return Result(True,str(out) if out is not None else 'Completado')
+        except Exception as e: return Result(False,f'{type(e).__name__}: {e}')
+    def declarations(self):
+        return [{'name':n,'description':d or n,'parameters':{'type':'OBJECT','properties':{}}} for n,(_,d) in self._items.items()]
+    def names(self): return sorted(self._items)

@@ -1,17 +1,14 @@
 {
   "spotify": {
     "enabled": false,
-    "redirect_uri": "http://127.0.0.1:8888/callback",
-    "preferred_device": ""
+    "cache_path": "config/.spotify_cache"
   },
   "obs": {
     "enabled": false,
     "host": "127.0.0.1",
-    "port": 4455,
-    "timeout": 5
+    "port": 4455
   },
-  "serial": {
-    "baudrate": 115200,
-    "timeout": 0.8
+  "gmail": {
+    "enabled": false
   }
 }

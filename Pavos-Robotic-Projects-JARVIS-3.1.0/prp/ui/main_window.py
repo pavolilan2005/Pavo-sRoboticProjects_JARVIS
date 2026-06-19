@@ -1,149 +1,170 @@
 from __future__ import annotations
-import asyncio
-import json
-from pathlib import Path
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer
-from PyQt6.QtWidgets import (QApplication, QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QMainWindow, QMessageBox, QPushButton, QSpinBox, QTabWidget, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget)
-from prp.core.controller import PrpController
+import asyncio,threading
+from PyQt6.QtCore import Qt,pyqtSignal,QObject,QTimer
+from PyQt6.QtGui import QColor,QPainter,QPen,QFont
+from PyQt6.QtWidgets import *
 
-class UiBridge(QObject):
-    log_signal = pyqtSignal(str)
-    transcript_signal = pyqtSignal(str, str)
-    state_signal = pyqtSignal(str)
-
+STYLE="""
+QMainWindow,QWidget{background:#061018;color:#d8f8ff;font-family:Segoe UI;font-size:13px}
+QTabWidget::pane{border:1px solid #123c4b;background:#08141d;border-radius:8px}
+QTabBar::tab{background:#0a1b25;color:#78bfd1;padding:10px 18px;border:1px solid #123c4b}
+QTabBar::tab:selected{color:#eaffff;background:#0c2b38;border-bottom:2px solid #00d9ff}
+QPushButton{background:#0b2b38;border:1px solid #00b8d9;border-radius:6px;padding:8px 14px;color:#bff7ff}
+QPushButton:hover{background:#104458;border-color:#4ce8ff}
+QLineEdit,QComboBox,QSpinBox,QDoubleSpinBox,QTextEdit,QTableWidget,QListWidget{background:#081820;border:1px solid #175064;border-radius:5px;padding:6px;selection-background-color:#0b6d82}
+QHeaderView::section{background:#0b2632;color:#7eeaff;padding:7px;border:0}
+QProgressBar{background:#041018;border:1px solid #175064;border-radius:5px;text-align:center}
+QProgressBar::chunk{background:#00d7ff;border-radius:4px}
+QLabel#Title{font-size:22px;font-weight:700;color:#8ef3ff}
+QLabel#State{font-size:14px;font-weight:700;color:#00e5ff}
+QGroupBox{border:1px solid #17495b;border-radius:8px;margin-top:10px;padding-top:12px;color:#64dff3}
+QGroupBox::title{subcontrol-origin:margin;left:12px;padding:0 5px}
+"""
+class Bridge(QObject):
+    log=pyqtSignal(str); transcript=pyqtSignal(str,str); state=pyqtSignal(str); level=pyqtSignal(float,float)
+class CoreOrb(QWidget):
+    def __init__(self): super().__init__(); self.phase=0; self.level=0; self.setMinimumSize(180,180); t=QTimer(self);t.timeout.connect(self.tick);t.start(40)
+    def tick(self): self.phase=(self.phase+3)%360;self.update()
+    def set_level(self,v):self.level=v;self.update()
+    def paintEvent(self,e):
+        p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing);c=self.rect().center();r=min(self.width(),self.height())//2-18
+        for i,a in enumerate([50,90,150]):
+            p.setPen(QPen(QColor(0,210,255,a),2)); rr=r-i*18+int(self.level/16);p.drawEllipse(c,rr,rr)
+        p.setPen(QPen(QColor('#00e5ff'),4));p.drawArc(c.x()-r,c.y()-r,2*r,2*r,self.phase*16,100*16)
+        p.setBrush(QColor(0,210,255,35+int(self.level)));p.setPen(Qt.PenStyle.NoPen);p.drawEllipse(c,45,45)
 class MainWindow(QMainWindow):
-    def __init__(self, root: Path):
-        super().__init__()
-        self.root_path = root
-        self.bridge = UiBridge()
-        self.bridge.log_signal.connect(self._append_log)
-        self.bridge.transcript_signal.connect(self._append_transcript)
-        self.bridge.state_signal.connect(self._set_state)
-        self.controller = PrpController(root, self.log)
-        self.live = None
-        self.async_loop = None
-        self.setWindowTitle("Pavo's Robotic Projects Assistant")
-        self.resize(1100, 720)
-        self._build()
-        self.refresh_all()
-
+    def __init__(self,controller):
+        super().__init__();self.controller=controller;self.live=None;self.loop=None;self.bridge=Bridge();self.setWindowTitle("Pavo's Robotic Projects — JARVIS");self.resize(1280,800);self.setStyleSheet(STYLE)
+        self.bridge.log.connect(self._log);self.bridge.transcript.connect(self._transcript);self.bridge.state.connect(self._state);self.bridge.level.connect(self._level)
+        self._build();self.refresh_audio_devices();self.load_all();controller.events.subscribe(lambda e:self.bridge.log.emit(f'[{e.time}] {e.topic}: {e.payload}'))
+    def callbacks(self):
+        class C:pass
+        c=C();c.log=lambda x:self.bridge.log.emit(x);c.transcript=lambda w,t:self.bridge.transcript.emit(w,t);c.state=lambda s:self.bridge.state.emit(s);return c
+    def attach_live(self,live,loop):self.live=live;self.loop=loop
     def _build(self):
-        tabs = QTabWidget(); self.setCentralWidget(tabs)
-        # Assistant
-        assistant = QWidget(); layout = QVBoxLayout(assistant)
-        head = QHBoxLayout(); self.state_label = QLabel("OFFLINE"); head.addWidget(QLabel("Pavo's Robotic Projects — JARVIS")); head.addStretch(); head.addWidget(self.state_label); layout.addLayout(head)
-        self.transcript = QTextEdit(); self.transcript.setReadOnly(True); layout.addWidget(self.transcript)
-        row = QHBoxLayout(); self.command = QLineEdit(); self.command.setPlaceholderText("Escribe una orden..."); send = QPushButton("Enviar"); send.clicked.connect(self._send_text); row.addWidget(self.command); row.addWidget(send); layout.addLayout(row)
-        tabs.addTab(assistant, "Asistente")
-        # Nodes
-        nodes = QWidget(); nl = QVBoxLayout(nodes); nbar = QHBoxLayout(); nadd=QPushButton("Agregar nodo"); nadd.clicked.connect(self.add_node); nsave=QPushButton("Guardar nodos"); nsave.clicked.connect(self.save_nodes); nbar.addWidget(nadd); nbar.addWidget(nsave); nbar.addStretch(); nl.addLayout(nbar)
-        self.node_table=QTableWidget(0,4); self.node_table.setHorizontalHeaderLabels(["ID","Nombre","Puerto","Baudrate"]); nl.addWidget(self.node_table); tabs.addTab(nodes,"Nodos ESP32")
-        # Devices
-        devices = QWidget(); dl = QVBoxLayout(devices); controls = QHBoxLayout(); refresh = QPushButton("Actualizar"); refresh.clicked.connect(self.refresh_devices); add = QPushButton("Agregar dispositivo"); add.clicked.connect(self.add_device); sync = QPushButton("Sincronizar nodo"); sync.clicked.connect(self.sync_selected_node); save_dev=QPushButton("Guardar dispositivos"); save_dev.clicked.connect(self._save_device_table); controls.addWidget(refresh); controls.addWidget(add); controls.addWidget(save_dev); controls.addWidget(sync); controls.addStretch(); dl.addLayout(controls)
-        self.device_table = QTableWidget(0, 7); self.device_table.setHorizontalHeaderLabels(["ID","Nombre","Nodo","GPIO","Tipo","Activo bajo","Alias"]); dl.addWidget(self.device_table); tabs.addTab(devices, "Domótica")
-        # Routines
-        routines = QWidget(); rl=QVBoxLayout(routines); self.routine_list=QListWidget(); rl.addWidget(self.routine_list); run=QPushButton("Ejecutar rutina"); run.clicked.connect(self.run_selected_routine); rl.addWidget(run); tabs.addTab(routines,"Rutinas")
-        # Integrations
-        integrations=QWidget(); il=QFormLayout(integrations)
-        self.sp_id=QLineEdit(); self.sp_secret=QLineEdit(); self.sp_secret.setEchoMode(QLineEdit.EchoMode.Password); self.obs_host=QLineEdit(); self.obs_port=QSpinBox(); self.obs_port.setMaximum(65535); self.obs_pass=QLineEdit(); self.obs_pass.setEchoMode(QLineEdit.EchoMode.Password)
-        il.addRow("Spotify Client ID",self.sp_id); il.addRow("Spotify Client Secret",self.sp_secret); il.addRow("OBS host",self.obs_host); il.addRow("OBS puerto",self.obs_port); il.addRow("OBS contraseña",self.obs_pass)
-        save=QPushButton("Guardar integraciones"); save.clicked.connect(self.save_integrations); il.addRow(save); tabs.addTab(integrations,"Integraciones")
-        # Audio
-        audio=QWidget(); al=QFormLayout(audio); self.sensitivity=QSpinBox(); self.sensitivity.setRange(1,100); al.addRow("Sensibilidad del micrófono",self.sensitivity); save_audio=QPushButton("Guardar sensibilidad"); save_audio.clicked.connect(self.save_audio); al.addRow(save_audio); tabs.addTab(audio,"Audio")
-        # Multimedia aliases
-        media=QWidget(); ml=QVBoxLayout(media); mbar=QHBoxLayout(); madd=QPushButton("Agregar alias"); madd.clicked.connect(self.add_media_alias); msave=QPushButton("Guardar alias"); msave.clicked.connect(self.save_media_aliases); mbar.addWidget(madd); mbar.addWidget(msave); mbar.addStretch(); ml.addLayout(mbar)
-        self.media_table=QTableWidget(0,5); self.media_table.setHorizontalHeaderLabels(["ID","Frases (coma)","Tipo","Destino","URI opcional"]); ml.addWidget(self.media_table); tabs.addTab(media,"Multimedia")
-        # Tasks
-        tasks=QWidget(); tl=QVBoxLayout(tasks); self.task_list=QListWidget(); tl.addWidget(self.task_list); trow=QHBoxLayout(); self.task_title=QLineEdit(); self.task_title.setPlaceholderText("Nueva tarea"); tadd=QPushButton("Agregar"); tadd.clicked.connect(self.add_task); trow.addWidget(self.task_title); trow.addWidget(tadd); tl.addLayout(trow); tabs.addTab(tasks,"Tareas")
-        # Logs
-        logs=QWidget(); ll=QVBoxLayout(logs); self.logs=QTextEdit(); self.logs.setReadOnly(True); ll.addWidget(self.logs); tabs.addTab(logs,"Actividad")
-
-    def attach_live(self, live, loop): self.live=live; self.async_loop=loop
-    def log(self, text:str): self.bridge.log_signal.emit(text)
-    def transcript_line(self, who:str,text:str): self.bridge.transcript_signal.emit(who,text)
-    def set_state(self,state:str): self.bridge.state_signal.emit(state)
-    def _append_log(self,text): self.logs.append(text)
-    def _append_transcript(self,who,text): self.transcript.append(f"<b>{who}:</b> {text}")
-    def _set_state(self,state): self.state_label.setText(state)
-    def _send_text(self):
-        text=self.command.text().strip(); self.command.clear()
-        if text and self.live and self.async_loop:
-            asyncio.run_coroutine_threadsafe(self.live.send_text(text), self.async_loop)
-    def refresh_all(self):
-        self.refresh_nodes(); self.refresh_devices(); self.refresh_routines(); self.refresh_media_aliases(); self.refresh_tasks(); self.load_integrations(); app=self.controller.config.load("app.json",{}) or {}; self.sensitivity.setValue(int(app.get("microphone",{}).get("sensitivity",78)))
-    def refresh_nodes(self):
-        data=(self.controller.config.load("nodes.json",{}) or {}).get("nodes",[]); self.node_table.setRowCount(len(data))
-        for r,n in enumerate(data):
-            for c,v in enumerate([n.get("id",""),n.get("name",""),n.get("port",""),str(n.get("baudrate",115200))]): self.node_table.setItem(r,c,QTableWidgetItem(v))
-    def add_node(self):
-        r=self.node_table.rowCount(); self.node_table.insertRow(r)
-        for c,v in enumerate([f"esp32_{r+1}",f"ESP32 {r+1}","COM6","115200"]): self.node_table.setItem(r,c,QTableWidgetItem(v))
+        central=QWidget();self.setCentralWidget(central);root=QVBoxLayout(central);head=QHBoxLayout();title=QLabel("PAVO'S ROBOTIC PROJECTS // JARVIS");title.setObjectName('Title');self.state=QLabel('OFFLINE');self.state.setObjectName('State');head.addWidget(title);head.addStretch();head.addWidget(self.state);root.addLayout(head)
+        self.tabs=QTabWidget();root.addWidget(self.tabs)
+        self._assistant_tab();self._audio_tab();self._domotics_tab();self._routines_tab();self._tasks_tab();self._integrations_tab();self._activity_tab()
+    def _assistant_tab(self):
+        tab=QWidget();lay=QHBoxLayout(tab);left=QVBoxLayout();self.orb=CoreOrb();left.addWidget(self.orb,0,Qt.AlignmentFlag.AlignCenter);self.mic_meter=QProgressBar();self.mic_meter.setRange(0,100);left.addWidget(self.mic_meter);self.mute=QPushButton('SILENCIAR MICRÓFONO');self.mute.setCheckable(True);self.mute.toggled.connect(lambda v:(self.controller.audio.set_muted(v),self.mute.setText('ACTIVAR MICRÓFONO' if v else 'SILENCIAR MICRÓFONO')));left.addWidget(self.mute);left.addStretch();lay.addLayout(left,1)
+        right=QVBoxLayout();self.transcript=QTextEdit();self.transcript.setReadOnly(True);right.addWidget(self.transcript);row=QHBoxLayout();self.command=QLineEdit();self.command.setPlaceholderText('Escribe una orden...');self.command.returnPressed.connect(self.send_text);send=QPushButton('EJECUTAR');send.clicked.connect(self.send_text);row.addWidget(self.command);row.addWidget(send);right.addLayout(row);lay.addLayout(right,4);self.tabs.addTab(tab,'ASISTENTE')
+    def _audio_tab(self):
+        tab=QWidget();lay=QVBoxLayout(tab);g=QGroupBox('DIAGNÓSTICO Y SELECCIÓN DE AUDIO');form=QFormLayout(g)
+        self.input_combo=QComboBox();self.output_combo=QComboBox();refresh=QPushButton('ACTUALIZAR DISPOSITIVOS');refresh.clicked.connect(self.refresh_audio_devices);form.addRow('Micrófono',self.input_combo);form.addRow('Salida',self.output_combo);form.addRow(refresh)
+        self.live_meter=QProgressBar();self.live_meter.setRange(0,100);form.addRow('Nivel en vivo',self.live_meter)
+        self.sensitivity=QSpinBox();self.sensitivity.setRange(1,100);self.gain=QDoubleSpinBox();self.gain.setRange(.2,5);self.gain.setSingleStep(.1);form.addRow('Sensibilidad',self.sensitivity);form.addRow('Ganancia digital',self.gain)
+        self.continuous=QCheckBox('Transmitir audio continuamente (recomendado; no exige gritar)');self.gate=QCheckBox('Usar compuerta de ruido experimental');form.addRow(self.continuous);form.addRow(self.gate)
+        bar=QHBoxLayout();save=QPushButton('GUARDAR Y REINICIAR AUDIO');save.clicked.connect(self.save_audio);test=QPushButton('GRABAR Y ESCUCHAR 4 SEGUNDOS');test.clicked.connect(self.audio_test);bar.addWidget(save);bar.addWidget(test);form.addRow(bar);lay.addWidget(g)
+        self.audio_status=QTextEdit();self.audio_status.setReadOnly(True);self.audio_status.setMaximumHeight(180);lay.addWidget(self.audio_status);lay.addStretch();self.tabs.addTab(tab,'AUDIO')
+    def _domotics_tab(self):
+        tab=QWidget();lay=QVBoxLayout(tab);top=QHBoxLayout();self.port_combo=QComboBox();scan=QPushButton('ESCANEAR PUERTOS');scan.clicked.connect(self.refresh_ports);top.addWidget(QLabel('Puerto nuevo:'));top.addWidget(self.port_combo);top.addWidget(scan);lay.addLayout(top)
+        self.nodes=QTableWidget(0,4);self.nodes.setHorizontalHeaderLabels(['ID','Nombre','Puerto','Baudrate']);self.nodes.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch);lay.addWidget(self.nodes);b=QHBoxLayout();add=QPushButton('AGREGAR NODO');add.clicked.connect(self.add_node);save=QPushButton('GUARDAR NODOS');save.clicked.connect(self.save_nodes);test=QPushButton('PROBAR NODO');test.clicked.connect(self.test_node);b.addWidget(add);b.addWidget(save);b.addWidget(test);lay.addLayout(b)
+        lay.addWidget(QLabel('DISPOSITIVOS Y GPIO'))
+        self.devices=QTableWidget(0,7);self.devices.setHorizontalHeaderLabels(['ID','Nombre','Nodo','GPIO','Tipo','Activo bajo','Alias']);self.devices.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch);lay.addWidget(self.devices)
+        db=QHBoxLayout();da=QPushButton('AGREGAR DISPOSITIVO');da.clicked.connect(self.add_device);ds=QPushButton('GUARDAR DISPOSITIVOS');ds.clicked.connect(self.save_devices);sync=QPushButton('SINCRONIZAR NODO');sync.clicked.connect(self.sync_node);db.addWidget(da);db.addWidget(ds);db.addWidget(sync);lay.addLayout(db);self.tabs.addTab(tab,'DOMÓTICA')
+    def _routines_tab(self):
+        tab=QWidget();lay=QVBoxLayout(tab);self.routines=QListWidget();lay.addWidget(self.routines);run=QPushButton('EJECUTAR RUTINA');run.clicked.connect(self.run_routine);lay.addWidget(run);self.tabs.addTab(tab,'RUTINAS')
+    def _tasks_tab(self):
+        tab=QWidget();lay=QVBoxLayout(tab);self.task_list=QListWidget();lay.addWidget(self.task_list);row=QHBoxLayout();self.task_title=QLineEdit();self.task_title.setPlaceholderText('Nueva tarea');add=QPushButton('CREAR TAREA');add.clicked.connect(self.add_task);done=QPushButton('COMPLETAR');done.clicked.connect(self.complete_task);row.addWidget(self.task_title);row.addWidget(add);row.addWidget(done);lay.addLayout(row);self.tabs.addTab(tab,'TAREAS')
+    def _integrations_tab(self):
+        tab=QWidget();form=QFormLayout(tab);self.gkey=QLineEdit();self.gkey.setEchoMode(QLineEdit.EchoMode.Password);self.sid=QLineEdit();self.ssecret=QLineEdit();self.ssecret.setEchoMode(QLineEdit.EchoMode.Password);self.opass=QLineEdit();self.opass.setEchoMode(QLineEdit.EchoMode.Password);self.ohost=QLineEdit();self.oport=QSpinBox();self.oport.setMaximum(65535)
+        for label,w in [('Gemini API key',self.gkey),('Spotify Client ID',self.sid),('Spotify Client Secret',self.ssecret),('OBS host',self.ohost),('OBS puerto',self.oport),('OBS contraseña',self.opass)]:form.addRow(label,w)
+        save=QPushButton('GUARDAR CREDENCIALES');save.clicked.connect(self.save_integrations);form.addRow(save);self.tabs.addTab(tab,'INTEGRACIONES')
+    def _activity_tab(self):
+        tab=QWidget();lay=QVBoxLayout(tab);self.logs=QTextEdit();self.logs.setReadOnly(True);lay.addWidget(self.logs);self.tabs.addTab(tab,'ACTIVIDAD')
+    def refresh_audio_devices(self):
+        self.input_combo.clear();self.output_combo.clear()
+        try:
+            ds=self.controller.audio.devices()
+            for d in ds:
+                label=f'{d["index"]}: {d["name"]} ({d["rate"]}Hz)'
+                if d['inputs']>0:self.input_combo.addItem(label,d['index'])
+                if d['outputs']>0:self.output_combo.addItem(label,d['index'])
+            cfg=(self.controller.config.load('app.json',{}) or {}).get('audio',{})
+            for combo,key in [(self.input_combo,'input_device'),(self.output_combo,'output_device')]:
+                idx=combo.findData(cfg.get(key)); combo.setCurrentIndex(idx if idx>=0 else 0)
+            self.audio_status.append(f'Dispositivo predeterminado de sounddevice: {self.controller.audio.defaults()}')
+        except Exception as e:self.audio_status.append(f'Error enumerando audio: {e}')
+    def load_all(self):
+        app=self.controller.config.load('app.json',{}) or {};a=app.get('audio',{});self.sensitivity.setValue(int(a.get('sensitivity',82)));self.gain.setValue(float(a.get('mic_gain',1)));self.continuous.setChecked(bool(a.get('stream_continuously',True)));self.gate.setChecked(bool(a.get('noise_gate_enabled',False)))
+        sec=self.controller.config.secrets();integ=self.controller.config.load('integrations.json',{}) or {};self.gkey.setText(sec.get('gemini_api_key',''));self.sid.setText(sec.get('spotify_client_id',''));self.ssecret.setText(sec.get('spotify_client_secret',''));self.opass.setText(sec.get('obs_password',''));self.ohost.setText(integ.get('obs',{}).get('host','127.0.0.1'));self.oport.setValue(int(integ.get('obs',{}).get('port',4455)))
+        self.nodes.setRowCount(0)
+        for n in (self.controller.config.load('nodes.json',{}) or {}).get('nodes',[]):self._insert_node(n)
+        self.routines.clear()
+        for r in self.controller.routines.definitions():self.routines.addItem(f'{r.get("id")} — {r.get("name")}')
+        self.refresh_devices();self.refresh_tasks();self.refresh_ports()
+    def save_audio(self):
+        s={'input_device':self.input_combo.currentData(),'output_device':self.output_combo.currentData(),'input_rate':16000,'model_output_rate':24000,'blocksize':1024,'stream_continuously':self.continuous.isChecked(),'noise_gate_enabled':self.gate.isChecked(),'sensitivity':self.sensitivity.value(),'mic_gain':self.gain.value()};self.controller.save_audio_settings(s)
+        try:self.controller.audio.restart();self.audio_status.append('Audio reiniciado correctamente con el dispositivo seleccionado.')
+        except Exception as e:self.audio_status.append(f'No se pudo reiniciar audio: {e}')
+    def audio_test(self):
+        self.audio_status.append('Grabando 4 segundos. Habla a volumen normal...')
+        def work():
+            try:
+                rec,rate,peak,rms=self.controller.audio.record_test(4);self.bridge.log.emit(f'Prueba de micrófono: pico={peak}, RMS={rms:.1f}, rate={rate}');self.controller.audio.play_test(rec,rate);self.bridge.log.emit('Prueba reproducida. Si te escuchaste, el micrófono es correcto.')
+            except Exception as e:self.bridge.log.emit(f'Error en prueba de audio: {e}')
+        threading.Thread(target=work,daemon=True).start()
+    def refresh_ports(self):
+        self.port_combo.clear()
+        try:
+            for p in self.controller.serial.ports():self.port_combo.addItem(f'{p["port"]} — {p["description"]}',p['port'])
+        except Exception as e:self._log(str(e))
+    def _insert_node(self,n):
+        r=self.nodes.rowCount();self.nodes.insertRow(r)
+        for c,v in enumerate([n.get('id',''),n.get('name',''),n.get('port',''),str(n.get('baudrate',115200))]):self.nodes.setItem(r,c,QTableWidgetItem(v))
+    def add_node(self):self._insert_node({'id':f'esp32_{self.nodes.rowCount()+1}','name':'ESP32','port':self.port_combo.currentData() or 'COM6','baudrate':115200})
     def save_nodes(self):
-        nodes=[]
-        for r in range(self.node_table.rowCount()):
-            get=lambda c:(self.node_table.item(r,c).text().strip() if self.node_table.item(r,c) else "")
-            try: baud=int(get(3) or 115200)
-            except ValueError: baud=115200
-            if get(0): nodes.append({"id":get(0),"name":get(1),"port":get(2),"baudrate":baud})
-        self.controller.config.save("nodes.json",{"nodes":nodes}); QMessageBox.information(self,"Nodos","Nodos guardados.")
+        arr=[]
+        for r in range(self.nodes.rowCount()):
+            vals=[self.nodes.item(r,c).text().strip() if self.nodes.item(r,c) else '' for c in range(4)]
+            if vals[0]:arr.append({'id':vals[0],'name':vals[1],'port':vals[2],'baudrate':int(vals[3] or 115200)})
+        self.controller.config.save('nodes.json',{'nodes':arr});self._log('Nodos guardados.')
+    def test_node(self):
+        r=self.nodes.currentRow()
+        if r<0:return
+        node=self.nodes.item(r,0).text();threading.Thread(target=lambda:self.bridge.log.emit(str(self.controller.serial.request(node,{'cmd':'ping'}))),daemon=True).start()
     def refresh_devices(self):
-        data=(self.controller.config.load("devices.json",{}) or {}).get("devices",[]); self.device_table.setRowCount(len(data))
-        for r,d in enumerate(data):
-            vals=[d.get("id",""),d.get("name",""),d.get("node_id",""),str(d.get("pin","")),d.get("type",""),str(d.get("active_low",False)),", ".join(d.get("aliases",[]))]
-            for c,v in enumerate(vals): self.device_table.setItem(r,c,QTableWidgetItem(v))
+        self.devices.setRowCount(0)
+        for d in (self.controller.config.load('devices.json',{}) or {}).get('devices',[]):
+            r=self.devices.rowCount();self.devices.insertRow(r);vals=[d.get('id',''),d.get('name',''),d.get('node_id',''),str(d.get('pin','')),d.get('type','digital_output'),str(d.get('active_low',False)),', '.join(d.get('aliases',[]))]
+            for c,v in enumerate(vals):self.devices.setItem(r,c,QTableWidgetItem(v))
     def add_device(self):
-        row=self.device_table.rowCount(); self.device_table.insertRow(row)
-        defaults=[f"device_{row+1}","Nuevo dispositivo","esp32_habitacion","23","digital_output","False",""]
-        for c,v in enumerate(defaults): self.device_table.setItem(row,c,QTableWidgetItem(v))
-        self._save_device_table()
-    def _save_device_table(self):
-        items=[]
-        for r in range(self.device_table.rowCount()):
-            get=lambda c:(self.device_table.item(r,c).text().strip() if self.device_table.item(r,c) else "")
-            try: pin=int(get(3))
-            except ValueError: continue
-            items.append({"id":get(0),"name":get(1),"node_id":get(2),"pin":pin,"type":get(4) or "digital_output","active_low":get(5).lower() in {"true","1","si","sí"},"aliases":[x.strip() for x in get(6).split(",") if x.strip()]})
-        self.controller.config.save("devices.json",{"devices":items})
-    def sync_selected_node(self):
-        self._save_device_table(); row=self.device_table.currentRow()
-        if row<0: QMessageBox.information(self,"Nodo","Selecciona un dispositivo del nodo a sincronizar."); return
-        node=self.device_table.item(row,2).text();
-        if self.async_loop: asyncio.run_coroutine_threadsafe(self.controller.execute("node.sync",{"node_id":node}),self.async_loop)
-    def refresh_routines(self):
-        self.routine_list.clear()
-        for r in self.controller.routines.definitions(): self.routine_list.addItem(f"{r.get('id')} — {r.get('name')}")
-    def run_selected_routine(self):
-        item=self.routine_list.currentItem()
-        if item and self.async_loop:
-            rid=item.text().split(" — ",1)[0]; asyncio.run_coroutine_threadsafe(self.controller.execute("routine.run",{"routine_id_or_alias":rid}),self.async_loop)
-    def refresh_media_aliases(self):
-        data=(self.controller.config.load("media_aliases.json",{}) or {}).get("aliases",[]); self.media_table.setRowCount(len(data))
-        for r,a in enumerate(data):
-            vals=[a.get("id",""),", ".join(a.get("phrases",[])),a.get("type","playlist"),a.get("target",""),a.get("uri","")]
-            for c,v in enumerate(vals): self.media_table.setItem(r,c,QTableWidgetItem(str(v)))
-    def add_media_alias(self):
-        r=self.media_table.rowCount(); self.media_table.insertRow(r)
-        for c,v in enumerate([f"alias_{r+1}","", "playlist", "", ""]): self.media_table.setItem(r,c,QTableWidgetItem(v))
-    def save_media_aliases(self):
-        aliases=[]
-        for r in range(self.media_table.rowCount()):
-            get=lambda c:(self.media_table.item(r,c).text().strip() if self.media_table.item(r,c) else "")
-            if get(0): aliases.append({"id":get(0),"phrases":[x.strip() for x in get(1).split(",") if x.strip()],"type":get(2) or "playlist","target":get(3),"uri":get(4)})
-        self.controller.config.save("media_aliases.json",{"aliases":aliases}); QMessageBox.information(self,"Multimedia","Alias guardados.")
+        r=self.devices.rowCount();self.devices.insertRow(r);vals=[f'device_{r+1}','Nuevo dispositivo','esp32_1','23','digital_output','False','']
+        for c,v in enumerate(vals):self.devices.setItem(r,c,QTableWidgetItem(v))
+    def save_devices(self):
+        arr=[]
+        for r in range(self.devices.rowCount()):
+            get=lambda c:self.devices.item(r,c).text().strip() if self.devices.item(r,c) else ''
+            try:pin=int(get(3))
+            except:continue
+            if get(0):arr.append({'id':get(0),'name':get(1),'node_id':get(2),'pin':pin,'type':get(4) or 'digital_output','active_low':get(5).lower() in {'true','1','sí','si'},'aliases':[x.strip() for x in get(6).split(',') if x.strip()]})
+        self.controller.config.save('devices.json',{'devices':arr});self._log('Dispositivos guardados.')
+    def sync_node(self):
+        self.save_devices();r=self.nodes.currentRow()
+        if r<0:self._log('Selecciona un nodo para sincronizar.');return
+        node=self.nodes.item(r,0).text();asyncio.run_coroutine_threadsafe(self.controller.execute('node.sync',{'node_id':node}),self.loop) if self.loop else None
     def refresh_tasks(self):
         self.task_list.clear()
-        for t in (self.controller.config.load("tasks.json",{}) or {}).get("tasks",[]):
-            self.task_list.addItem(("✓ " if t.get("done") else "• ")+t.get("title",""))
+        for t in self.controller.tasks.list():
+            item=QListWidgetItem(('✓ ' if t.get('done') else '• ')+t.get('title',''));item.setData(Qt.ItemDataRole.UserRole,t.get('id'));self.task_list.addItem(item)
     def add_task(self):
-        title=self.task_title.text().strip(); self.task_title.clear()
-        if title:
-            self.controller.tasks.add(title); self.refresh_tasks()
-    def load_integrations(self):
-        cfg=self.controller.config.load("integrations.json",{}) or {}; sec=self.controller.config.secrets(); sp=cfg.get("spotify",{}); obs=cfg.get("obs",{})
-        self.sp_id.setText(sec.get("spotify_client_id","")); self.sp_secret.setText(sec.get("spotify_client_secret","")); self.obs_host.setText(obs.get("host","127.0.0.1")); self.obs_port.setValue(int(obs.get("port",4455))); self.obs_pass.setText(sec.get("obs_password",""))
+        title=self.task_title.text().strip();self.task_title.clear()
+        if title:self.controller.tasks.add(title);self.refresh_tasks()
+    def complete_task(self):
+        item=self.task_list.currentItem()
+        if item:self.controller.tasks.complete(item.data(Qt.ItemDataRole.UserRole));self.refresh_tasks()
+    def run_routine(self):
+        item=self.routines.currentItem()
+        if item and self.loop:
+            rid=item.text().split(' — ')[0];asyncio.run_coroutine_threadsafe(self.controller.execute('routine.run',{'routine_id':rid}),self.loop)
     def save_integrations(self):
-        cfg=self.controller.config.load("integrations.json",{}) or {}; cfg.setdefault("spotify",{})["enabled"]=True; cfg.setdefault("obs",{}).update({"enabled":True,"host":self.obs_host.text().strip() or "127.0.0.1","port":self.obs_port.value()}); self.controller.config.save("integrations.json",cfg)
-        sec=self.controller.config.secrets(); sec.update({"spotify_client_id":self.sp_id.text().strip(),"spotify_client_secret":self.sp_secret.text().strip(),"obs_password":self.obs_pass.text()}); self.controller.config.save("secrets.json",sec); QMessageBox.information(self,"Integraciones","Configuración guardada.")
-    def save_audio(self):
-        cfg=self.controller.config.load("app.json",{}) or {}; cfg.setdefault("microphone",{})["sensitivity"]=self.sensitivity.value(); self.controller.config.save("app.json",cfg); QMessageBox.information(self,"Audio","Sensibilidad guardada. Reinicia para aplicarla.")
-    def closeEvent(self,event): self.controller.close(); super().closeEvent(event)
+        sec=self.controller.config.secrets();sec.update({'gemini_api_key':self.gkey.text().strip(),'spotify_client_id':self.sid.text().strip(),'spotify_client_secret':self.ssecret.text().strip(),'spotify_redirect_uri':'http://127.0.0.1:8888/callback','obs_password':self.opass.text()});self.controller.config.save('secrets.json',sec)
+        cfg=self.controller.config.load('integrations.json',{}) or {};cfg.setdefault('obs',{}).update({'host':self.ohost.text().strip() or '127.0.0.1','port':self.oport.value(),'enabled':True});cfg.setdefault('spotify',{})['enabled']=True;self.controller.config.save('integrations.json',cfg);self._log('Integraciones guardadas. Reinicia JARVIS para renovar Gemini.')
+    def send_text(self):
+        t=self.command.text().strip();self.command.clear()
+        if t and self.live and self.loop:asyncio.run_coroutine_threadsafe(self.live.send_text(t),self.loop)
+    def _log(self,t):self.logs.append(t);self.audio_status.append(t) if hasattr(self,'audio_status') and ('audio' in t.lower() or 'mic' in t.lower()) else None
+    def _transcript(self,w,t):self.transcript.append(f'<span style="color:#00dfff"><b>{w}</b></span><br>{t}<br>')
+    def _state(self,s):self.state.setText(s)
+    def _level(self,v,rms):self.mic_meter.setValue(int(v));self.live_meter.setValue(int(v));self.orb.set_level(v)
+    def closeEvent(self,e):self.controller.close();super().closeEvent(e)

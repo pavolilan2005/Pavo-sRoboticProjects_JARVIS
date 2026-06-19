@@ -3,28 +3,47 @@
     {
       "id": "modo_stream",
       "name": "Modo Stream",
-      "aliases": ["modo stream", "prepara el stream", "vamos a transmitir"],
+      "aliases": [
+        "prepara el stream",
+        "modo stream"
+      ],
       "steps": [
-        {"parallel": [
-          {"capability": "app.open", "args": {"name": "obs"}},
-          {"capability": "app.open", "args": {"name": "spotify"}},
-          {"capability": "browser.open", "args": {"url": "https://dashboard.twitch.tv"}}
-        ]},
-        {"capability": "wait.seconds", "args": {"seconds": 3}},
-        {"capability": "obs.scene", "args": {"scene": "Starting Soon"}, "optional": true},
-        {"capability": "spotify.play_alias", "args": {"alias": "stream"}, "optional": true},
-        {"capability": "spotify.volume", "args": {"volume": 20}, "optional": true},
-        {"capability": "scene.activate", "args": {"scene_id": "stream"}, "optional": true}
-      ]
-    },
-    {
-      "id": "terminar_stream",
-      "name": "Terminar Stream",
-      "aliases": ["termina el stream", "cierra el stream"],
-      "steps": [
-        {"capability": "obs.record.stop", "args": {}, "optional": true},
-        {"capability": "spotify.pause", "args": {}, "optional": true},
-        {"capability": "scene.activate", "args": {"scene_id": "normal"}, "optional": true}
+        {
+          "parallel": [
+            {
+              "capability": "pc.open_app",
+              "args": {
+                "name": "obs"
+              }
+            },
+            {
+              "capability": "pc.open_app",
+              "args": {
+                "name": "spotify"
+              }
+            },
+            {
+              "capability": "pc.open_url",
+              "args": {
+                "url": "https://dashboard.twitch.tv/"
+              }
+            }
+          ]
+        },
+        {
+          "capability": "obs.set_scene",
+          "args": {
+            "scene": "Starting Soon"
+          },
+          "optional": true
+        },
+        {
+          "capability": "spotify.play_alias",
+          "args": {
+            "alias": "stream"
+          },
+          "optional": true
+        }
       ]
     }
   ]

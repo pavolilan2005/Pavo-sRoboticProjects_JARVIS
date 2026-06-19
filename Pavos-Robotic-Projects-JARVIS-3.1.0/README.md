@@ -1,28 +1,24 @@
-# Pavo's Robotic Projects Assistant
+# Pavo's Robotic Projects — JARVIS 2.0
 
-Asistente modular de voz, domótica y automatización de PC creado para **Pavo's Robotic Projects**.
+Reconstrucción limpia centrada en estabilidad de audio y separación estricta de responsabilidades.
 
-## Instalación
+## Primer arranque
+1. Ejecuta `INSTALAR.bat`.
+2. Ejecuta `INICIAR.bat`.
+3. Ve a **Integraciones** y guarda tu API key.
+4. Ve a **Audio**, selecciona explícitamente tu micrófono y salida.
+5. Pulsa **Guardar y reiniciar audio**.
+6. Usa **Grabar y escuchar 4 segundos**. Si te escuchas, el hardware está bien.
 
-1. Extrae el proyecto en una carpeta nueva.
-2. Ejecuta `INSTALAR.bat`.
-3. Abre `config/secrets.json` y coloca `gemini_api_key`.
-4. Ejecuta `INICIAR.bat`.
+## Por qué ahora no tienes que gritar
+El micrófono se transmite continuamente a Gemini mientras JARVIS no habla. No se usa una compuerta RMS rígida por defecto. La sensibilidad queda disponible para futuras funciones, pero no bloquea tu voz.
 
-## Sensibilidad de voz
+## Arquitectura
+- `AudioService`: único propietario de micrófono y bocinas.
+- `SerialService`: único propietario de puertos COM.
+- `GeminiLiveService`: única sesión Gemini.
+- `Controller`: registro y ejecución de capacidades.
+- `MainWindow`: solo UI; no abre serial ni streams.
 
-La sensibilidad inicial es 78/100. El VAD usa ruido adaptativo, 550 ms de preroll y un umbral que disminuye al aumentar la sensibilidad. Ya no existe el límite rígido de 800 que obligaba a gritar. Ajusta el valor desde la pestaña **Audio** y reinicia.
-
-## ESP32
-
-Copia `firmware/esp32_node/main.py` a la placa como `main.py`. Agrega el nodo en `config/nodes.json`, por ejemplo:
-
-```json
-{"nodes":[{"id":"esp32_habitacion","name":"ESP32 Habitación","port":"COM6","baudrate":115200}]}
-```
-
-Después crea dispositivos desde la pestaña Domótica y sincroniza el nodo.
-
-## Integraciones
-
-Spotify y OBS se configuran en la pestaña Integraciones. La contraseña de OBS y secretos de Spotify se guardan en `config/secrets.json`.
+## Seguridad
+`config/secrets.json` queda excluido por `.gitignore`.

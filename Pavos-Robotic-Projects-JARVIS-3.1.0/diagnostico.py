@@ -1,10 +1,14 @@
 from pathlib import Path
-import json, importlib
-root=Path(__file__).resolve().parent
-print("Pavo's Robotic Projects Assistant — Diagnóstico")
-for module in ["PyQt6","sounddevice","numpy","serial","psutil","spotipy","obsws_python","google.genai"]:
-    try: importlib.import_module(module); print("OK",module)
-    except Exception as e: print("FALTA",module,e)
-for name in ["app.json","integrations.json","nodes.json","devices.json","routines.json","modes.json","scenes.json"]:
-    try: json.loads((root/"config"/name).read_text(encoding="utf-8")); print("JSON OK",name)
-    except Exception as e: print("JSON ERROR",name,e)
+import json,compileall
+print('=== PRP Assistant diagnóstico ===')
+root=Path(__file__).parent
+print('Compilación:',compileall.compile_dir(root,quiet=1))
+try:
+ import sounddevice as sd
+ print('Audio default:',sd.default.device)
+ for i,d in enumerate(sd.query_devices()):print(i,d['name'],'IN',d['max_input_channels'],'OUT',d['max_output_channels'],int(d['default_samplerate']))
+except Exception as e:print('Audio ERROR:',e)
+try:
+ from google import genai
+ print('google-genai OK')
+except Exception as e:print('Gemini SDK ERROR:',e)

@@ -1,18 +1,6 @@
-# Arquitectura de Pavo's Robotic Projects Assistant
+# Arquitectura 2.0
 
-El proyecto fue escrito desde una carpeta vacía. No conserva `mark_core`, `nexus`, conexiones seriales en la UI ni controladores duplicados.
+UI → Controller → CapabilityRegistry → Services
 
-## Reglas
-
-- `SerialService` es el único dueño de PySerial y de los hilos lectores.
-- La UI solo edita configuración y pide acciones al `PrpController`.
-- `CapabilityRegistry` es la única puerta de ejecución para voz, rutinas y botones.
-- Las rutinas usan capacidades; no llaman directamente a Spotify, OBS o ESP32.
-- Los secretos viven únicamente en `config/secrets.json`.
-- El firmware recibe dispositivos por JSON y no contiene pines fijos.
-
-## Flujo
-
-UI / Gemini Live → PrpController → CapabilityRegistry → Services
-
-RoutineEngine y ModeEngine usan el mismo registro de capacidades.
+La UI nunca importa `serial`, `sounddevice`, `spotipy`, `obsws_python` ni `google.genai`.
+Cada recurso físico tiene un único dueño. El audio se selecciona, prueba y reinicia desde la interfaz.

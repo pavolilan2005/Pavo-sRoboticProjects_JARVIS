@@ -1,11 +1,8 @@
-google-genai>=1.20.0
-PyQt6>=6.7.0
+PyQt6>=6.7,<7
 sounddevice>=0.5.1
-numpy>=1.26.0
+numpy>=2.0
+Google-genai>=1.55.0
 pyserial>=3.5
-psutil>=6.0.0
-spotipy>=2.24.0
-obsws-python>=1.7.0
-requests>=2.32.0
-google-api-python-client>=2.160.0
-google-auth-oauthlib>=1.2.1
+psutil>=6.0
+spotipy>=2.25
+obsws-python>=1.7

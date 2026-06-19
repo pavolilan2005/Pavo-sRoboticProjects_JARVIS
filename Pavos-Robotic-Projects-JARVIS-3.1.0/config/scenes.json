@@ -1,6 +1,0 @@
-{
-  "scenes": [
-    {"id": "stream", "name": "Iluminación Stream", "devices": {}},
-    {"id": "normal", "name": "Iluminación Normal", "devices": {}}
-  ]
-}
