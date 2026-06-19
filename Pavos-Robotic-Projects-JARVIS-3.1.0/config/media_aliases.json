@@ -1,3 +1,37 @@
 {
-  "aliases": []
+  "version": 1,
+  "aliases": [
+    {
+      "id": "stream",
+      "phrases": [
+        "stream",
+        "musica para stream",
+        "música para stream",
+        "la del stream",
+        "playlist del stream"
+      ],
+      "type": "playlist",
+      "target": "Stream",
+      "uri": "",
+      "volume": 22,
+      "device": "",
+      "enabled": true
+    },
+    {
+      "id": "estudio",
+      "phrases": [
+        "estudio",
+        "programar",
+        "musica para programar",
+        "música para programar",
+        "modo estudio"
+      ],
+      "type": "playlist",
+      "target": "Focus",
+      "uri": "",
+      "volume": 18,
+      "device": "",
+      "enabled": true
+    }
+  ]
 }

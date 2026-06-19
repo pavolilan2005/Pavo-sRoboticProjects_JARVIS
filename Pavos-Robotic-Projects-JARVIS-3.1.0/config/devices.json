@@ -1,13 +1,16 @@
 {
+  "version": 1,
   "devices": [
     {
-      "id": "device_1",
+      "id": "foco",
       "name": "Foco",
-      "node_id": "esp32_1",
-      "pin": 2,
+      "aliases": ["luz", "lámpara", "lampara", "led", "foco del cuarto"],
+      "node": "esp32_principal",
+      "pin": 23,
       "type": "digital_output",
       "active_low": false,
-      "aliases": []
+      "default_state": 0,
+      "capabilities": ["on", "off", "toggle", "status"]
     }
   ]
 }

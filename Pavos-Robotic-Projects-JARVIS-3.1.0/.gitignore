@@ -1,6 +1,0 @@
-.venv/
-__pycache__/
-*.pyc
-config/secrets.json
-config/.spotify_cache
-logs/*.log

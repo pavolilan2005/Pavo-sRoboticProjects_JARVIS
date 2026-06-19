@@ -1,10 +1,16 @@
 {
+  "version": 1,
   "nodes": [
     {
-      "id": "esp32_1",
-      "name": "ESP32",
-      "port": "COM5",
-      "baudrate": 115200
+      "id": "esp32_principal",
+      "name": "ESP32 Principal",
+      "transport": "serial",
+      "protocol": "prp-node-v1",
+      "port": "COM6",
+      "baudrate": 115200,
+      "boot_wait": 1.3,
+      "enabled": true,
+      "auto_sync": true
     }
   ]
 }

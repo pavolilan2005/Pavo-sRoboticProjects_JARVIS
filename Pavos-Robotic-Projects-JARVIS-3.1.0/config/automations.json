@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "automations": [
+    {
+      "id": "avisar_esp32_offline",
+      "name": "Avisar cuando un nodo ESP32 se desconecta",
+      "enabled": true,
+      "trigger": {
+        "type": "event",
+        "topic": "esp32.node.offline"
+      },
+      "conditions": [],
+      "actions": [
+        {
+          "capability": "notifications.emit",
+          "params": {
+            "title": "ESP32 desconectada",
+            "message": "Un nodo domótico perdió la conexión.",
+            "priority": "high"
+          }
+        }
+      ],
+      "cooldown": 30
+    }
+  ]
+}

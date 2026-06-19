@@ -1,59 +1,54 @@
 @echo off
-setlocal EnableExtensions
+setlocal
+cd /d "%~dp0"
 chcp 65001 >nul
-cd /d "%~dp0" || (
-    echo [ERROR] No se pudo abrir la carpeta del proyecto.
-    pause
-    exit /b 1
-)
 
 echo ================================================
-echo  Pavo's Robotic Projects - JARVIS Installer
+echo  PAVO'S ROBOTIC PROJECTS - JARVIS 3.0.0
+echo  Instalacion limpia
 echo ================================================
-echo.
 
-set "PYTHON_CMD="
-py -3.11 --version >nul 2>&1 && set "PYTHON_CMD=py -3.11"
-if not defined PYTHON_CMD (
-    python --version >nul 2>&1 && set "PYTHON_CMD=python"
-)
-if not defined PYTHON_CMD (
-    echo [ERROR] No se encontro Python 3.11 o compatible.
-    echo Instala Python y activa la opcion Add Python to PATH.
-    pause
-    exit /b 1
+where py >nul 2>&1
+if errorlevel 1 (
+  echo [ERROR] No se encontro el lanzador de Python "py".
+  echo Instala Python 3.11 o 3.12 desde python.org y activa "Add Python to PATH".
+  pause
+  exit /b 1
 )
 
-if not exist ".venv\Scripts\python.exe" (
-    echo [1/4] Creando entorno virtual...
-    %PYTHON_CMD% -m venv ".venv"
-    if errorlevel 1 goto :install_error
+if exist ".venv" (
+  echo [INFO] Entorno virtual existente detectado.
 ) else (
-    echo [1/4] Entorno virtual existente.
+  echo [1/4] Creando entorno virtual...
+  py -3.11 -m venv ".venv"
+  if errorlevel 1 py -3 -m venv ".venv"
+  if errorlevel 1 (
+    echo [ERROR] No pude crear .venv.
+    pause
+    exit /b 1
+  )
 )
 
-echo [2/4] Actualizando pip dentro del entorno virtual...
+echo [2/4] Actualizando pip...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
-if errorlevel 1 goto :install_error
+if errorlevel 1 goto :fail
 
 echo [3/4] Instalando dependencias...
 ".venv\Scripts\python.exe" -m pip install -r "requirements.txt"
-if errorlevel 1 goto :install_error
+if errorlevel 1 goto :fail
 
 echo [4/4] Preparando configuracion...
-if not exist "config\secrets.json" (
-    copy /Y "config\secrets.example.json" "config\secrets.json" >nul
-)
+if not exist "config\api_keys.json" copy /Y "config\api_keys.example.json" "config\api_keys.json" >nul
+if not exist "logs" mkdir "logs"
 
 echo.
-echo [OK] Instalacion terminada correctamente.
-echo Ya puedes ejecutar INICIAR.bat.
+echo [OK] Instalacion terminada.
+echo Ejecuta INICIAR.bat
 pause
 exit /b 0
 
-:install_error
+:fail
 echo.
 echo [ERROR] La instalacion no termino correctamente.
-echo Revisa el mensaje mostrado arriba.
 pause
 exit /b 1

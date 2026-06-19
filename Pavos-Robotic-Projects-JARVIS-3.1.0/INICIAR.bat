@@ -1,27 +1,15 @@
 @echo off
-setlocal EnableExtensions
+setlocal
+cd /d "%~dp0"
 chcp 65001 >nul
-cd /d "%~dp0" || (
-    echo [ERROR] No se pudo abrir la carpeta del proyecto.
-    pause
-    exit /b 1
-)
-
 if not exist ".venv\Scripts\python.exe" (
-    echo [ERROR] No existe el entorno virtual.
-    echo Ejecuta INSTALAR.bat primero.
-    pause
-    exit /b 1
+  echo [ERROR] Falta .venv. Ejecuta INSTALAR.bat primero.
+  pause
+  exit /b 1
 )
-
-set "PYTHONUTF8=1"
 ".venv\Scripts\python.exe" "main.py"
-set "APP_EXIT=%ERRORLEVEL%"
-
-if not "%APP_EXIT%"=="0" (
-    echo.
-    echo [ERROR] JARVIS termino con codigo %APP_EXIT%.
-    echo Ejecuta DIAGNOSTICO.bat para obtener mas informacion.
-    pause
+if errorlevel 1 (
+  echo.
+  echo JARVIS termino con un error. Revisa la salida anterior.
+  pause
 )
-exit /b %APP_EXIT%
