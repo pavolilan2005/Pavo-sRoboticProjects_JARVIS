@@ -1,8 +1,35 @@
 {
   "version": 1,
   "scenes": [
-    {"id": "normal", "name": "Normal", "targets": [{"device": "foco", "action": "off"}]},
-    {"id": "stream", "name": "Stream", "targets": [{"device": "foco", "action": "on"}]},
-    {"id": "estudio", "name": "Estudio", "targets": [{"device": "foco", "action": "on"}]}
+    {
+      "id": "normal",
+      "name": "Normal",
+      "targets": [
+        {
+          "device": "foco",
+          "action": "off"
+        }
+      ]
+    },
+    {
+      "id": "stream",
+      "name": "Stream",
+      "targets": [
+        {
+          "device": "foco",
+          "action": "on"
+        }
+      ]
+    },
+    {
+      "id": "estudio",
+      "name": "Estudio",
+      "targets": [
+        {
+          "device": "foco",
+          "action": "on"
+        }
+      ]
+    }
   ]
 }

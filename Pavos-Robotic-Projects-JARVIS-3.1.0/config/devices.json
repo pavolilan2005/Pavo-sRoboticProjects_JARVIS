@@ -4,9 +4,20 @@
     {
       "id": "foco",
       "name": "Foco",
-      "aliases": ["luz", "lámpara", "lampara", "led", "foco del cuarto"],
+      "aliases": ["luz", "lámpara", "led", "foco del cuarto"],
       "node": "esp32_principal",
       "pin": 23,
+      "type": "digital_output",
+      "active_low": false,
+      "default_state": 0,
+      "capabilities": ["on", "off", "toggle", "status"]
+    },
+    {
+      "id": "ventilador",
+      "name": "Ventilador",
+      "aliases": ["ventilador del cuarto", "abanico", "fan"],
+      "node": "esp32_principal",
+      "pin": 2,
       "type": "digital_output",
       "active_low": false,
       "default_state": 0,

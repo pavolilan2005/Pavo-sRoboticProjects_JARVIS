@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Secrets and private runtime data
+config/api_keys.json
+memory/long_term.json
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+config/gmail_credentials.json
+config/gmail_token.json
+config/spotify_cache*
+logs/*.log

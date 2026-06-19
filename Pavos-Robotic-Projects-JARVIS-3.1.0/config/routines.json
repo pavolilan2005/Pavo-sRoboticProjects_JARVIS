@@ -48,10 +48,9 @@
           "retries": 1
         },
         {
-          "capability": "media.smart_play",
+          "capability": "spotify.play_playlist",
           "params": {
-            "alias": "stream",
-            "target_type": "alias"
+            "playlist": "Stream"
           },
           "critical": false
         },
@@ -132,10 +131,9 @@
           ]
         },
         {
-          "capability": "media.smart_play",
+          "capability": "spotify.play_playlist",
           "params": {
-            "alias": "estudio",
-            "target_type": "alias"
+            "playlist": "Focus"
           },
           "critical": false
         },

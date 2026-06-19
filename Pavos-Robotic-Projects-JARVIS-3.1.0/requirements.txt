@@ -1,11 +1,35 @@
-PyQt6>=6.7,<7
-sounddevice>=0.5.1
-numpy>=2.0
-Google-genai>=1.55.0
-pyserial>=3.5
-psutil>=6.0
-spotipy>=2.25
-obsws-python>=1.7
-google-api-python-client>=2.150
-google-auth-oauthlib>=1.2
-Pillow>=10.0
+sounddevice
+google-genai
+Pillow
+requests
+beautifulsoup4
+ddgs
+duckduckgo-search
+playwright
+pyautogui
+pyperclip
+pygetwindow
+opencv-python
+numpy
+mss
+psutil
+comtypes; platform_system == "Windows"
+pycaw; platform_system == "Windows"
+win10toast; platform_system == "Windows"
+send2trash
+youtube-transcript-api
+pywinauto; platform_system == "Windows"
+python-pptx
+PyQt6
+pdfplumber
+PyPDF2
+python-docx
+pandas
+pydub
+pyserial
+openpyxl
+obsws-python
+spotipy
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib

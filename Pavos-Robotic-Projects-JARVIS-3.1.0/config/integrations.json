@@ -1,7 +1,22 @@
 {
   "version": 1,
-  "obs": {"host": "127.0.0.1", "port": 4455, "password": "", "timeout": 5},
-  "spotify": {"client_id": "", "client_secret": "", "redirect_uri": "http://127.0.0.1:8888/callback", "preferred_device": ""},
-  "gmail": {"credentials_path": "config/gmail_credentials.json", "token_path": "config/gmail_token.json"},
-  "windows_notifications": {"enabled": false}
+  "obs": {
+    "host": "localhost",
+    "port": 4455,
+    "password": "",
+    "timeout": 5
+  },
+  "spotify": {
+    "client_id": "",
+    "client_secret": "",
+    "redirect_uri": "http://127.0.0.1:8888/callback",
+    "preferred_device": ""
+  },
+  "gmail": {
+    "credentials_path": "config/gmail_credentials.json",
+    "token_path": "config/gmail_token.json"
+  },
+  "windows_notifications": {
+    "enabled": false
+  }
 }

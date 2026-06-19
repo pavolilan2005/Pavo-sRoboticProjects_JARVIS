@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "input_device": null,
+  "output_device": null,
+  "sensitivity": 82,
+  "input_gain": 1.2,
+  "vad_enabled": true,
+  "min_rms": 12.0,
+  "max_rms": 6000.0,
+  "calibration_seconds": 1.2,
+  "speech_trail_seconds": 1.25,
+  "preroll_chunks": 6,
+  "output_sample_rate": null
+}
