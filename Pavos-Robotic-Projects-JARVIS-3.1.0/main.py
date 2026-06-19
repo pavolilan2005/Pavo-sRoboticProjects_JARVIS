@@ -678,6 +678,29 @@ TOOL_DECLARATIONS = [
         }
     },
     {
+        "name": "map_navigation",
+        "description": (
+            "Controls the PRP holographic 3D map. Use it whenever the user asks to open the map, "
+            "show a place, fly to a city or monument, return to global view, identify coordinates, "
+            "save a location, set home, list saved places, or clear map markers."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {
+                    "type": "STRING",
+                    "description": "open | search | fly_to | home | global | save | set_home | list_saved | reverse | clear | status"
+                },
+                "query": {"type": "STRING", "description": "Place, city, monument, address, or geographic search"},
+                "lat": {"type": "NUMBER", "description": "Latitude for coordinate navigation"},
+                "lon": {"type": "NUMBER", "description": "Longitude for coordinate navigation"},
+                "height": {"type": "NUMBER", "description": "Camera height in meters"},
+                "name": {"type": "STRING", "description": "Visible name for a saved location or marker"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "flight_finder",
         "description": "Searches Google Flights and speaks the best options.",
         "parameters": {
@@ -1159,7 +1182,7 @@ class JarvisLive:
             self._ui_log(
                 "SYS: Comandos locales: /status, /ports, /esp32 COMx, /home "
                 "dispositivo acción, /routines, /routine nombre, /mode start|stop|status nombre, "
-                "/media acción [valor], /obs acción [valor], /pc, /mail, /notifications, "
+                "/media acción [valor], /obs acción [valor], /map [lugar], /pc, /mail, /notifications, "
                 "/control, /sleep, /wake, /stop, /mic, /mic calibrate, /mic devices, /audio."
             )
         elif command == "/status":
@@ -1231,6 +1254,15 @@ class JarvisLive:
             payload = {"action": action}
             if action in {"scene", "set_scene"} and len(parts) > 1: payload["scene"] = parts[1]
             self._run_platform_local(lambda: self.platform.tool_call("obs_control", payload))
+        elif command in {"/map", "/mapa", "/holomap"}:
+            if value:
+                self._run_platform_local(
+                    lambda: self.platform.tool_call("map_navigation", {"action": "search", "query": value})
+                )
+            else:
+                self._run_platform_local(
+                    lambda: self.platform.tool_call("map_navigation", {"action": "open"})
+                )
         elif command == "/pc":
             self._run_platform_local(lambda: self.platform.execute("pc.status"))
         elif command in {"/mail", "/email", "/correo"}:
@@ -1566,6 +1598,15 @@ class JarvisLive:
             "and notification_center for notification requests. Report partial failures honestly.\n"
         )
 
+        map_protocol = (
+            "[PRP HOLOGRAPHIC NAVIGATION]\n"
+            "Use map_navigation whenever the user asks to open a map, locate, show, visit, fly to, "
+            "or navigate to a place, monument, city, country, or coordinates. The map is a 3D globe "
+            "inside the PRP interface. For phrases such as 'llévame a las pirámides de Giza' use "
+            "action=search with the full place name. Use global to return to the world view, home for "
+            "the configured primary location, and save/set_home only when explicitly requested.\n"
+        )
+
         now      = datetime.now()
         time_str = now.strftime("%A, %B %d, %Y — %I:%M %p")
         time_ctx = (
@@ -1574,7 +1615,7 @@ class JarvisLive:
             f"Use this to calculate exact times for reminders.\n\n"
         )
 
-        parts = [time_ctx, wake_protocol, domotica_protocol, nexus_protocol]
+        parts = [time_ctx, wake_protocol, domotica_protocol, nexus_protocol, map_protocol]
         if mem_str:
             parts.append(mem_str)
         parts.append(sys_prompt)
@@ -1736,7 +1777,7 @@ class JarvisLive:
 
             elif name in {
                 "run_routine", "manage_mode", "media_control", "obs_control",
-                "pc_status", "email_center", "notification_center"
+                "pc_status", "email_center", "notification_center", "map_navigation"
             }:
                 action_result = await loop.run_in_executor(
                     None, lambda: self.platform.tool_call(name, args)

@@ -36,6 +36,7 @@ def main() -> int:
         "google.genai": "google-genai",
         "sounddevice": "sounddevice",
         "PyQt6": "PyQt6",
+        "PyQt6.QtWebEngineWidgets": "PyQt6-WebEngine",
         "serial": "pyserial",
         "numpy": "numpy",
         "PIL": "Pillow",
@@ -64,7 +65,7 @@ def main() -> int:
         failures += 1
         status(False, "config/api_keys.json", str(exc))
 
-    for filename in ["nodes.json", "devices.json", "routines.json", "modes.json", "automations.json", "integrations.json"]:
+    for filename in ["nodes.json", "devices.json", "routines.json", "modes.json", "automations.json", "integrations.json", "map.json", "locations.json"]:
         try:
             json.loads((BASE / "config" / filename).read_text(encoding="utf-8"))
             status(True, f"config/{filename}")

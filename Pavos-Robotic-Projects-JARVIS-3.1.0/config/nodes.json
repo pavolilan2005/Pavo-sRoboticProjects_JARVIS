@@ -6,9 +6,12 @@
       "name": "ESP32 Principal",
       "transport": "serial",
       "protocol": "jarvis-node-v1",
-      "port": "COM5",
+      "port": "COM6",
       "baudrate": 115200,
-      "enabled": true
+      "enabled": true,
+      "online": false,
+      "last_seen": 0.0,
+      "last_error": "could not open port 'COM5': FileNotFoundError(2, 'El sistema no puede encontrar el archivo especificado.', None, 2)"
     }
   ]
 }

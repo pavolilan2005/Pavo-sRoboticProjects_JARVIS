@@ -74,6 +74,8 @@ def main() -> None:
         "config/routines.json",
         "config/modes.json",
         "config/automations.json",
+        "config/map.json",
+        "config/locations.json",
         "memory/long_term.json",
     ]
 

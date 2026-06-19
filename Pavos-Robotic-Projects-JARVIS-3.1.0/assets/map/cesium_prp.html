@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PRP Holographic Navigation</title>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.142/Build/Cesium/Cesium.js"></script>
+  <link rel="stylesheet" href="https://cesium.com/downloads/cesiumjs/releases/1.142/Build/Cesium/Widgets/widgets.css" />
+  <style>
+    :root {
+      --cyan:#00eaff;
+      --ice:#d7f8ff;
+      --green:#39ff88;
+      --blue:#4aa8ff;
+      --void:#020a12;
+    }
+    html, body, #cesiumContainer { width:100%; height:100%; margin:0; overflow:hidden; background:#020a12; }
+    body { font-family: Consolas, "Courier New", monospace; }
+    .cesium-viewer-bottom, .cesium-viewer-toolbar, .cesium-viewer-animationContainer,
+    .cesium-viewer-timelineContainer, .cesium-viewer-fullscreenContainer { display:none !important; }
+    .cesium-widget-credits { color:#73cfe4 !important; text-shadow:0 0 4px #000; font-size:10px; }
+    #hud { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+    #vignette { position:absolute; inset:0; box-shadow:inset 0 0 130px 45px rgba(0,8,18,.9); }
+    #grid { position:absolute; inset:0; opacity:.16; background-image:
+      linear-gradient(rgba(0,234,255,.22) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,234,255,.22) 1px, transparent 1px);
+      background-size:56px 56px; transform:perspective(600px) rotateX(56deg) scale(1.9); transform-origin:50% 100%; }
+    #scan { position:absolute; left:0; right:0; height:2px; top:-4px;
+      background:linear-gradient(90deg, transparent, rgba(0,234,255,.95), transparent);
+      box-shadow:0 0 18px 4px rgba(0,234,255,.5); animation:scan 5.2s linear infinite; }
+    @keyframes scan { from {transform:translateY(0)} to {transform:translateY(100vh)} }
+    #reticle { position:absolute; left:50%; top:50%; width:118px; height:118px; transform:translate(-50%,-50%);
+      border:1px solid rgba(0,234,255,.6); border-radius:50%; box-shadow:0 0 24px rgba(0,234,255,.25); }
+    #reticle::before, #reticle::after { content:""; position:absolute; background:rgba(0,234,255,.68); }
+    #reticle::before { left:50%; top:-24px; width:1px; height:166px; }
+    #reticle::after { top:50%; left:-24px; height:1px; width:166px; }
+    #ring { position:absolute; left:50%; top:50%; width:210px; height:210px; transform:translate(-50%,-50%);
+      border:1px dashed rgba(57,255,136,.48); border-radius:50%; animation:spin 12s linear infinite; }
+    @keyframes spin { to { transform:translate(-50%,-50%) rotate(360deg); } }
+    #status { position:absolute; left:18px; bottom:18px; min-width:260px; padding:10px 14px;
+      color:var(--ice); background:rgba(2,10,18,.72); border:1px solid rgba(0,234,255,.55);
+      clip-path:polygon(0 0, 94% 0, 100% 28%, 100% 100%, 6% 100%, 0 72%);
+      letter-spacing:1px; font-size:11px; text-transform:uppercase; }
+    #mode { color:var(--green); font-weight:bold; }
+    #coords { color:#6da8bb; margin-top:4px; }
+    #loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--cyan);
+      background:#020a12; z-index:20; letter-spacing:3px; font-weight:bold; }
+    #loading.hidden { opacity:0; pointer-events:none; transition:opacity .7s; }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <div id="hud">
+    <div id="grid"></div><div id="vignette"></div><div id="scan"></div><div id="ring"></div><div id="reticle"></div>
+    <div id="status"><div id="mode">PRP HOLOGRAPHIC NAVIGATION</div><div id="coords">LAT -- · LON -- · ALT --</div></div>
+  </div>
+  <div id="loading">INICIALIZANDO GLOBO TÁCTICO...</div>
+<script>
+(function(){
+  const loading = document.getElementById('loading');
+  const coords = document.getElementById('coords');
+  if (typeof Cesium === 'undefined') {
+    loading.textContent = 'NO SE PUDO CARGAR CESIUMJS · REVISA INTERNET O FIREWALL';
+    loading.style.color = '#ff315f';
+    console.log('PRP_MAP_EVENT:' + JSON.stringify({type:'load_error', payload:{message:'CesiumJS no disponible'}}));
+    return;
+  }
+  const viewer = new Cesium.Viewer('cesiumContainer', {
+    animation:false, timeline:false, geocoder:false, homeButton:false,
+    sceneModePicker:false, baseLayerPicker:false, navigationHelpButton:false,
+    fullscreenButton:false, infoBox:false, selectionIndicator:false,
+    shouldAnimate:true, terrainProvider:new Cesium.EllipsoidTerrainProvider(),
+    baseLayer:new Cesium.ImageryLayer(new Cesium.OpenStreetMapImageryProvider({
+      url:'https://tile.openstreetmap.org/'
+    }))
+  });
+  window.viewer = viewer;
+  viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#020a12');
+  viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#03111b');
+  viewer.scene.globe.showGroundAtmosphere = true;
+  viewer.scene.globe.enableLighting = false;
+  viewer.scene.skyAtmosphere.hueShift = 0.42;
+  viewer.scene.skyAtmosphere.saturationShift = -0.15;
+  viewer.scene.skyAtmosphere.brightnessShift = -0.18;
+  viewer.scene.fog.enabled = true;
+  viewer.scene.fog.density = 0.00018;
+  viewer.scene.screenSpaceCameraController.minimumZoomDistance = 35;
+  viewer.scene.screenSpaceCameraController.maximumZoomDistance = 45000000;
+
+  const base = viewer.imageryLayers.get(0);
+  if (base) { base.brightness=.48; base.contrast=1.55; base.saturation=.28; base.gamma=.82; base.hue=.48; }
+
+  let markerCounter = 0;
+  let orbitEnabled = false;
+  let orbitSpeed = 0.0025;
+  let selected = null;
+
+  function report(type, payload){
+    console.log('PRP_MAP_EVENT:' + JSON.stringify({type:type, payload:payload||{}}));
+  }
+  function escapeText(s){ return String(s||'').replace(/[<>]/g,''); }
+  function altitudeFor(height){ return Math.max(250, Number(height)||120000); }
+
+  window.prpMap = {
+    flyTo(lat, lon, height, label){
+      lat=Number(lat); lon=Number(lon); height=altitudeFor(height);
+      selected={lat,lon,height,label:label||''};
+      viewer.camera.flyTo({
+        destination:Cesium.Cartesian3.fromDegrees(lon,lat,height),
+        orientation:{heading:0,pitch:Cesium.Math.toRadians(height<15000?-52:-88),roll:0},
+        duration:2.8,
+        easingFunction:Cesium.EasingFunction.QUADRATIC_IN_OUT
+      });
+      if(label){ this.addMarker(lat,lon,label,true); }
+      document.getElementById('mode').textContent='NAVEGANDO · ' + escapeText(label||'COORDENADAS');
+      report('fly_started',{lat,lon,height,label:label||''});
+    },
+    globalView(){
+      selected=null;
+      viewer.camera.flyTo({destination:Cesium.Cartesian3.fromDegrees(-102.5,23.6,11500000),duration:2.5});
+      document.getElementById('mode').textContent='VISTA GLOBAL · MÉXICO';
+      report('global_view',{});
+    },
+    addMarker(lat,lon,label,focus){
+      lat=Number(lat); lon=Number(lon); markerCounter++;
+      const phase=markerCounter;
+      const entity=viewer.entities.add({
+        id:'prp_marker_'+markerCounter,
+        position:Cesium.Cartesian3.fromDegrees(lon,lat,20),
+        point:{
+          pixelSize:new Cesium.CallbackProperty(function(){return 12+4*Math.sin(Date.now()/260+phase);},false),
+          color:Cesium.Color.fromCssColorString('#00eaff'),
+          outlineColor:Cesium.Color.fromCssColorString('#d7f8ff'), outlineWidth:2,
+          heightReference:Cesium.HeightReference.CLAMP_TO_GROUND
+        },
+        label:{text:String(label||'PUNTO'),font:'bold 14px Consolas',fillColor:Cesium.Color.WHITE,
+          outlineColor:Cesium.Color.fromCssColorString('#020a12'),outlineWidth:4,
+          style:Cesium.LabelStyle.FILL_AND_OUTLINE,pixelOffset:new Cesium.Cartesian2(0,-30),
+          distanceDisplayCondition:new Cesium.DistanceDisplayCondition(0,2000000)}
+      });
+      if(focus){ viewer.selectedEntity=entity; }
+      report('marker_added',{lat,lon,label:label||''});
+      return entity.id;
+    },
+    clearMarkers(){ viewer.entities.removeAll(); markerCounter=0; report('markers_cleared',{}); },
+    setOrbit(enabled){ orbitEnabled=!!enabled; document.getElementById('mode').textContent=orbitEnabled?'ÓRBITA AUTOMÁTICA':'NAVEGACIÓN MANUAL'; },
+    zoom(delta){ viewer.camera.zoomIn(Number(delta)||100000); },
+    setStreetStyle(enabled){
+      if(!base) return;
+      if(enabled){base.brightness=.75;base.contrast=1.18;base.saturation=.72;base.gamma=1.0;base.hue=0;}
+      else {base.brightness=.48;base.contrast=1.55;base.saturation=.28;base.gamma=.82;base.hue=.48;}
+    },
+    current(){
+      const c=viewer.camera.positionCartographic;
+      return {lat:Cesium.Math.toDegrees(c.latitude),lon:Cesium.Math.toDegrees(c.longitude),height:c.height};
+    }
+  };
+
+  viewer.clock.onTick.addEventListener(function(){ if(orbitEnabled){ viewer.camera.rotateRight(orbitSpeed); } });
+  viewer.camera.changed.addEventListener(function(){
+    const c=viewer.camera.positionCartographic;
+    const lat=Cesium.Math.toDegrees(c.latitude).toFixed(5);
+    const lon=Cesium.Math.toDegrees(c.longitude).toFixed(5);
+    const alt=Math.round(c.height).toLocaleString();
+    coords.textContent=`LAT ${lat} · LON ${lon} · ALT ${alt} m`;
+  });
+
+  const handler=new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  handler.setInputAction(function(click){
+    const ray=viewer.camera.getPickRay(click.position);
+    const pos=viewer.scene.globe.pick(ray,viewer.scene);
+    if(!pos) return;
+    const carto=Cesium.Cartographic.fromCartesian(pos);
+    const lat=Cesium.Math.toDegrees(carto.latitude);
+    const lon=Cesium.Math.toDegrees(carto.longitude);
+    selected={lat,lon,height:viewer.camera.positionCartographic.height,label:''};
+    report('clicked',{lat,lon,height:selected.height});
+  },Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+  viewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(-102.5,23.6,11500000)});
+  setTimeout(()=>loading.classList.add('hidden'),800);
+  report('ready',{version:'1.142'});
+})();
+</script>
+</body>
+</html>

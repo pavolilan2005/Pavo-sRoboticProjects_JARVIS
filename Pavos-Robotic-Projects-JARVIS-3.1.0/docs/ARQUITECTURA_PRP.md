@@ -100,3 +100,27 @@ config/
 ```
 
 No se utilizan archivos de configuración serial o domótica duplicados.
+
+## Navegación holográfica 3.2.0
+
+```text
+Gemini / comando local / UI
+            │
+            ▼
+      map_navigation
+            │
+            ▼
+ NavigationAdapter
+   ├── Nominatim geocoding
+   ├── cache JSON
+   ├── home / saved locations
+   └── EventBus
+            │
+            ▼
+ HolographicMapWidget
+            │
+            ▼
+ CesiumJS + Qt WebEngine
+```
+
+La UI no realiza peticiones de geocodificación. `NavigationAdapter` es el único propietario de la búsqueda, caché y persistencia de ubicaciones.

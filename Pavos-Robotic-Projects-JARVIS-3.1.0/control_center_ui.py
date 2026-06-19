@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -93,6 +94,7 @@ class ControlCenterDialog(QDialog):
 
         self.tabs.addTab(self._build_dashboard(), "INICIO")
         self.tabs.addTab(self._build_audio(), "AUDIO")
+        self.tabs.addTab(self._build_map(), "MAPA")
         self.tabs.addTab(self._build_nodes(), "NODOS ESP32")
         self.tabs.addTab(self._build_devices(), "DISPOSITIVOS")
         self.tabs.addTab(self._build_routines(), "RUTINAS")
@@ -130,6 +132,109 @@ class ControlCenterDialog(QDialog):
             row.addWidget(b)
         lay.addLayout(row)
         return page
+
+    # ------------------------------- map --------------------------------
+    def _build_map(self) -> QWidget:
+        page = QWidget()
+        lay = QVBoxLayout(page)
+
+        info = QLabel(
+            "Configura el sistema holográfico de navegación. Las búsquedas se abren "
+            "en el globo 3D de la ventana principal y las ubicaciones se guardan localmente."
+        )
+        info.setWordWrap(True)
+        info.setStyleSheet(f"color:{DIM};")
+        lay.addWidget(info)
+
+        search_box = self._section("Búsqueda")
+        search_row = QHBoxLayout(search_box)
+        self.map_search_input = line_edit()
+        self.map_search_input.setPlaceholderText("Ej. Pirámides de Giza, Tokio, CERN...")
+        search_row.addWidget(self.map_search_input, 1)
+        search_btn = button("BUSCAR EN HOLOMAP")
+        search_btn.clicked.connect(self._map_search)
+        search_row.addWidget(search_btn)
+        open_btn = button("ABRIR MAPA")
+        open_btn.clicked.connect(lambda: self._run_background(lambda: self.platform.tool_call("map_navigation", {"action": "open"})))
+        search_row.addWidget(open_btn)
+        lay.addWidget(search_box)
+
+        home_box = self._section("Ubicación principal")
+        form = QFormLayout(home_box)
+        self.map_home_name = line_edit()
+        self.map_home_lat = QDoubleSpinBox(); self.map_home_lat.setRange(-90, 90); self.map_home_lat.setDecimals(7)
+        self.map_home_lon = QDoubleSpinBox(); self.map_home_lon.setRange(-180, 180); self.map_home_lon.setDecimals(7)
+        self.map_home_height = QSpinBox(); self.map_home_height.setRange(250, 20_000_000); self.map_home_height.setSuffix(" m")
+        for widget in (self.map_home_lat, self.map_home_lon, self.map_home_height):
+            widget.setStyleSheet(self._spin_style())
+        form.addRow("Nombre", self.map_home_name)
+        form.addRow("Latitud", self.map_home_lat)
+        form.addRow("Longitud", self.map_home_lon)
+        form.addRow("Altura de cámara", self.map_home_height)
+        save_home = button("GUARDAR COMO UBICACIÓN PRINCIPAL")
+        save_home.clicked.connect(self._map_save_home)
+        form.addRow(save_home)
+        lay.addWidget(home_box)
+
+        saved_box = self._section("Ubicaciones guardadas")
+        saved_lay = QVBoxLayout(saved_box)
+        self.map_saved = QListWidget()
+        self.map_saved.setStyleSheet(self._list_style())
+        self.map_saved.itemDoubleClicked.connect(lambda _item: self._map_go_saved())
+        saved_lay.addWidget(self.map_saved)
+        row = QHBoxLayout()
+        go = button("NAVEGAR")
+        go.clicked.connect(self._map_go_saved)
+        home = button("IR A CASA")
+        home.clicked.connect(lambda: self._run_background(lambda: self.platform.tool_call("map_navigation", {"action": "home"})))
+        global_btn = button("VISTA GLOBAL")
+        global_btn.clicked.connect(lambda: self._run_background(lambda: self.platform.tool_call("map_navigation", {"action": "global"})))
+        row.addWidget(go); row.addWidget(home); row.addWidget(global_btn)
+        saved_lay.addLayout(row)
+        lay.addWidget(saved_box, 1)
+        return page
+
+    def _load_map(self):
+        if not hasattr(self.platform, "navigation"):
+            return
+        status = self.platform.navigation.status({})
+        home = dict(status.data.get("home") or {})
+        self.map_home_name.setText(str(home.get("name") or ""))
+        self.map_home_lat.setValue(float(home.get("lat") or 0.0))
+        self.map_home_lon.setValue(float(home.get("lon") or 0.0))
+        self.map_home_height.setValue(int(home.get("height") or 18000))
+        self.map_saved.clear()
+        for location in status.data.get("saved") or []:
+            item = QListWidgetItem(
+                f"{location.get('name', 'Ubicación')} · {float(location.get('lat', 0)):.5f}, {float(location.get('lon', 0)):.5f}"
+            )
+            item.setData(Qt.ItemDataRole.UserRole, dict(location))
+            self.map_saved.addItem(item)
+
+    def _map_search(self):
+        query = self.map_search_input.text().strip()
+        if not query:
+            self._show_status("Escribe un lugar para buscar.")
+            return
+        self._run_background(lambda: self.platform.tool_call("map_navigation", {"action": "search", "query": query}))
+
+    def _map_save_home(self):
+        self._run_background(lambda: self.platform.tool_call("map_navigation", {
+            "action": "set_home",
+            "name": self.map_home_name.text().strip() or "Casa",
+            "lat": self.map_home_lat.value(),
+            "lon": self.map_home_lon.value(),
+            "height": self.map_home_height.value(),
+        }))
+
+    def _map_go_saved(self):
+        item = self.map_saved.currentItem()
+        if not item:
+            self._show_status("Selecciona una ubicación guardada.")
+            return
+        location = dict(item.data(Qt.ItemDataRole.UserRole) or {})
+        payload = {"action": "fly_to", **location}
+        self._run_background(lambda: self.platform.tool_call("map_navigation", payload))
 
     # ------------------------------ audio -------------------------------
     def _build_audio(self) -> QWidget:
@@ -938,6 +1043,7 @@ class ControlCenterDialog(QDialog):
     # ----------------------------- helpers ------------------------------
     def refresh_all(self):
         self._load_audio()
+        self._load_map()
         self._load_nodes()
         self._load_devices()
         self._load_routines()
@@ -954,7 +1060,8 @@ class ControlCenterDialog(QDialog):
             f"Automatizaciones: {status['automations']}\n"
             f"Modos activos: {', '.join(active_modes) or 'ninguno'}\n"
             f"Nodos ESP32: {len(status['nodes'])}\n"
-            f"Dispositivos domóticos: {len(status['devices'])}\n\n"
+            f"Dispositivos domóticos: {len(status['devices'])}\n"
+            f"Módulo de navegación: disponible\n\n"
             "Desde este panel puedes cambiar GPIO, nombres, alias y funciones; crear rutinas; "
             "activar modos persistentes; y configurar OBS, Spotify y Gmail sin editar Python."
         )

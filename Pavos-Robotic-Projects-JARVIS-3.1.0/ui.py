@@ -38,6 +38,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QStackedWidget,
     QPushButton,
     QComboBox,
     QSizePolicy,
@@ -45,6 +46,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from map_ui import HolographicMapWidget
 
 
 def _base_dir() -> Path:
@@ -84,6 +87,9 @@ class C:
     GOLD = "#9edfff"
     ORANGE = "#5cc2ff"
     RED = "#ff315f"
+    STANDBY = "#d7f8ff"
+    ANALYZING = "#39ff88"
+    NAVIGATION = "#5d8dff"
 
     LINE = "#1d5d87"
     LINE2 = "#35b3e5"
@@ -321,9 +327,11 @@ class PavoHudCanvas(QWidget):
         if state == "LISTENING":
             return C.CYAN2
         if state in ("PROCESSING", "THINKING"):
-            return C.MAGENTA
+            return C.ANALYZING
+        if state == "NAVIGATING":
+            return C.NAVIGATION
         if state == "SLEEPING":
-            return C.TEXT2
+            return C.STANDBY
         return C.CYAN
 
     def _state_label(self) -> str:
@@ -332,7 +340,8 @@ class PavoHudCanvas(QWidget):
             "SPEAKING": "TRANSMITTING",
             "LISTENING": "ESCUCHANDO",
             "THINKING": "ANALIZANDO",
-            "PROCESSING": "PROCESSING",
+            "PROCESSING": "ANALIZANDO",
+            "NAVIGATING": "NAVEGANDO",
             "SLEEPING": "STANDBY",
             "MUTED": "MICRÓFONO EN SILENCIO",
             "INITIALISING": "BOOT SEQUENCE",
@@ -1100,6 +1109,13 @@ class MainWindow(QMainWindow):
     _esp32_status_sig = pyqtSignal(str, str, str)
     _esp32_ports_sig = pyqtSignal(object, str)
     _confirm_sig = pyqtSignal(str, str, object)
+    _map_open_sig = pyqtSignal()
+    _map_fly_sig = pyqtSignal(float, float, float, str)
+    _map_results_sig = pyqtSignal(object, str)
+    _map_status_sig = pyqtSignal(str, str)
+    _map_marker_sig = pyqtSignal(float, float, str)
+    _map_clear_sig = pyqtSignal()
+    _map_global_sig = pyqtSignal()
 
     def __init__(self, face_path: str):
         super().__init__()
@@ -1135,7 +1151,8 @@ class MainWindow(QMainWindow):
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(11)
 
-        body.addWidget(self._build_left_panel(), stretch=0)
+        self._left_panel = self._build_left_panel()
+        body.addWidget(self._left_panel, stretch=0)
 
         center_frame = QFrame()
         center_frame.setStyleSheet(_panel_style(C.LINE3, C.VOID2, 24))
@@ -1143,11 +1160,26 @@ class MainWindow(QMainWindow):
         center_lay.setContentsMargins(9, 9, 9, 9)
         center_lay.setSpacing(8)
 
+        center_lay.addWidget(self._build_mode_switcher())
+        self._center_stack = QStackedWidget()
+        self._center_stack.setStyleSheet("background: transparent; border: none;")
+
         self.hud = PavoHudCanvas(face_path)
-        center_lay.addWidget(self.hud, stretch=1)
+        self._map_widget = HolographicMapWidget(BASE_DIR)
+        self._map_widget.search_requested.connect(self._map_search_requested)
+        self._map_widget.home_requested.connect(self._map_home_requested)
+        self._map_widget.set_home_requested.connect(self._map_set_home_requested)
+        self._map_widget.save_requested.connect(self._map_save_requested)
+        self._map_widget.reverse_requested.connect(self._map_reverse_requested)
+        self._map_widget.core_requested.connect(self._show_core_page)
+
+        self._center_stack.addWidget(self.hud)
+        self._center_stack.addWidget(self._map_widget)
+        center_lay.addWidget(self._center_stack, stretch=1)
 
         body.addWidget(center_frame, stretch=1)
-        body.addWidget(self._build_right_panel(), stretch=0)
+        self._right_panel = self._build_right_panel()
+        body.addWidget(self._right_panel, stretch=0)
         root.addLayout(body, stretch=1)
         root.addWidget(self._build_footer())
 
@@ -1166,6 +1198,13 @@ class MainWindow(QMainWindow):
         self._esp32_status_sig.connect(self._apply_esp32_status)
         self._esp32_ports_sig.connect(self._apply_esp32_ports)
         self._confirm_sig.connect(self._apply_confirm)
+        self._map_open_sig.connect(self._open_map_page)
+        self._map_fly_sig.connect(self._map_widget.fly_to)
+        self._map_results_sig.connect(self._map_widget.set_results)
+        self._map_status_sig.connect(self._map_widget.set_status)
+        self._map_marker_sig.connect(self._map_widget.add_marker)
+        self._map_clear_sig.connect(self._map_widget.clear_markers)
+        self._map_global_sig.connect(self._map_widget.map_view.global_view)
 
         self._overlay: SetupOverlay | None = None
         self._ready = self._check_config()
@@ -1177,6 +1216,88 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("F4"), self).activated.connect(self._toggle_mute)
         QShortcut(QKeySequence("Esc"), self).activated.connect(self._interrupt_speech)
         QShortcut(QKeySequence("F11"), self).activated.connect(self._toggle_fullscreen)
+
+    def _build_mode_switcher(self) -> QWidget:
+        bar = QFrame()
+        bar.setFixedHeight(46)
+        bar.setStyleSheet(_panel_style(C.LINE, "#030c16", 16))
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(8, 6, 8, 6)
+        row.setSpacing(8)
+
+        self._core_view_btn = QPushButton("◉  NÚCLEO")
+        self._map_view_btn = QPushButton("◎  HOLOMAP")
+        self._control_view_btn = QPushButton("▦  CONTROL")
+        for button in (self._core_view_btn, self._map_view_btn, self._control_view_btn):
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+            button.setFixedHeight(32)
+            row.addWidget(button)
+        row.addStretch()
+        self._view_status = QLabel("CORE ONLINE")
+        self._view_status.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        self._view_status.setStyleSheet(f"color:{C.ANALYZING}; border:none; padding-right:8px;")
+        row.addWidget(self._view_status)
+
+        self._core_view_btn.clicked.connect(self._show_core_page)
+        self._map_view_btn.clicked.connect(self._open_map_page)
+        self._control_view_btn.clicked.connect(self._open_control_center)
+        self._style_mode_buttons(0)
+        return bar
+
+    def _style_mode_buttons(self, active_index: int):
+        buttons = (self._core_view_btn, self._map_view_btn, self._control_view_btn)
+        colors = (C.CYAN, C.NAVIGATION, C.ANALYZING)
+        for index, (button, color) in enumerate(zip(buttons, colors)):
+            if index == active_index:
+                button.setStyleSheet(_button_style(C.VOID, color, color, C.WHITE, 11))
+            else:
+                button.setStyleSheet(_button_style(color, C.LINE, "#030c16", "#09243a", 11))
+
+    def _show_core_page(self):
+        self._center_stack.setCurrentIndex(0)
+        self._style_mode_buttons(0)
+        self._view_status.setText("CORE ONLINE")
+        self._left_panel.show()
+        self._right_panel.show()
+
+    def _open_map_page(self):
+        self._center_stack.setCurrentIndex(1)
+        self._style_mode_buttons(1)
+        self._view_status.setText("HOLOMAP ONLINE")
+        # The map gets the full mission viewport; core telemetry returns when
+        # the user switches back to NÚCLEO.
+        self._left_panel.hide()
+        self._right_panel.hide()
+        self._map_widget.fade_in()
+
+    def _run_map_action(self, action: str, payload: dict | None = None):
+        if self.platform is None or not hasattr(self.platform, "navigation"):
+            self._log.append_log("ERR: El módulo de navegación todavía no está disponible.")
+            return
+        params = dict(payload or {})
+        params["action"] = action
+
+        def worker():
+            result = self.platform.tool_call("map_navigation", params)
+            self._log_sig.emit(f"MAP: {result.message}")
+
+        threading.Thread(target=worker, name="PRPMapAction", daemon=True).start()
+
+    def _map_search_requested(self, query: str):
+        self._run_map_action("search", {"query": query})
+
+    def _map_home_requested(self):
+        self._run_map_action("home")
+
+    def _map_set_home_requested(self, lat: float, lon: float, name: str):
+        self._run_map_action("set_home", {"lat": lat, "lon": lon, "name": name})
+
+    def _map_save_requested(self, lat: float, lon: float, name: str):
+        self._run_map_action("save", {"lat": lat, "lon": lon, "name": name})
+
+    def _map_reverse_requested(self, lat: float, lon: float):
+        self._run_map_action("reverse", {"lat": lat, "lon": lon})
 
     def _build_header(self) -> QWidget:
         w = QFrame()
@@ -1837,6 +1958,27 @@ class JarvisUI:
 
     def write_log(self, text: str):
         self._win._log_sig.emit(text)
+
+    def open_map(self):
+        self._win._map_open_sig.emit()
+
+    def map_fly_to(self, lat: float, lon: float, height: float = 18000.0, label: str = ""):
+        self._win._map_fly_sig.emit(float(lat), float(lon), float(height), str(label))
+
+    def map_show_results(self, results, query: str = ""):
+        self._win._map_results_sig.emit(list(results or []), str(query))
+
+    def map_set_status(self, text: str, color: str = C.ANALYZING):
+        self._win._map_status_sig.emit(str(text), str(color))
+
+    def map_add_marker(self, lat: float, lon: float, label: str = "PUNTO"):
+        self._win._map_marker_sig.emit(float(lat), float(lon), str(label))
+
+    def map_clear_markers(self):
+        self._win._map_clear_sig.emit()
+
+    def map_global_view(self):
+        self._win._map_global_sig.emit()
 
     def wait_for_api_key(self):
         while not self._win._ready:

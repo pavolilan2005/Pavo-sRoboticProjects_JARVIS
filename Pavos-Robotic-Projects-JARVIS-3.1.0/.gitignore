@@ -23,3 +23,5 @@ logs/*.log
 *.bak
 *.orig
 config/.spotify_cache*
+
+config/map_cache.json

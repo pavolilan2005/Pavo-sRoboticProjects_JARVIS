@@ -16,6 +16,7 @@ from .adapters.audio import AudioSettingsAdapter
 from .adapters.esp32 import ESP32Adapter
 from .adapters.gmail import GmailAdapter
 from .adapters.media import MediaAdapter
+from .adapters.navigation import NavigationAdapter
 from .adapters.notifications import NotificationsAdapter
 from .adapters.obs import OBSAdapter
 from .adapters.pc import PCAdapter
@@ -60,6 +61,7 @@ class PRPPlatform:
         self.pc = PCAdapter(self.registry, self.event_bus, ui)
         self.media = MediaAdapter(self.registry, self.event_bus)
         self.notifications = NotificationsAdapter(self.registry, self.event_bus, ui)
+        self.navigation = NavigationAdapter(self.registry, self.event_bus, self.base_dir, ui)
         self.obs = OBSAdapter(self.registry, self.event_bus, self.get_integrations, ui)
         self.spotify = SpotifyAdapter(self.registry, self.event_bus, self.get_integrations, self.base_dir)
         self.gmail = GmailAdapter(self.registry, self.event_bus, self.get_integrations, self.base_dir)
@@ -74,6 +76,7 @@ class PRPPlatform:
             self.pc,
             self.media,
             self.notifications,
+            self.navigation,
             self.obs,
             self.spotify,
             self.gmail,
@@ -144,6 +147,7 @@ class PRPPlatform:
             "nodes": self.esp32.list_nodes(),
             "devices": self.esp32.list_devices(),
             "audio": self.audio.load(),
+            "map": self.navigation.status({}).data,
         }
 
     def tool_call(self, name: str, args: dict[str, Any]) -> ActionResult:
@@ -172,6 +176,8 @@ class PRPPlatform:
             return self._email_center(args)
         if name == "notification_center":
             return self._notification_center(args)
+        if name == "map_navigation":
+            return self._map_navigation(args)
         if name == "home_automation":
             return self.execute("domotics.control", args)
         if name == "list_home_devices":
@@ -261,6 +267,33 @@ class PRPPlatform:
             return ActionResult.failure(f"Acción de correo desconocida: {action}")
         return self.execute(capability, args)
 
+
+    def _map_navigation(self, args: dict[str, Any]) -> ActionResult:
+        action = str(args.get("action", "open")).lower().strip()
+        mapping = {
+            "open": "map.open",
+            "search": "map.search",
+            "find": "map.search",
+            "fly": "map.fly_to",
+            "fly_to": "map.fly_to",
+            "navigate": "map.fly_to",
+            "home": "map.home",
+            "global": "map.global",
+            "world": "map.global",
+            "save": "map.save",
+            "set_home": "map.set_home",
+            "saved": "map.saved",
+            "list_saved": "map.saved",
+            "reverse": "map.reverse",
+            "identify": "map.reverse",
+            "clear": "map.clear",
+            "status": "map.status",
+        }
+        capability = mapping.get(action)
+        if not capability:
+            return ActionResult.failure(f"Acción de mapa desconocida: {action}")
+        return self.execute(capability, args)
+
     def _notification_center(self, args: dict[str, Any]) -> ActionResult:
         action = str(args.get("action", "list")).lower()
         mapping = {"list": "notifications.list", "read": "notifications.read", "windows": "notifications.windows", "emit": "notifications.emit"}
@@ -285,6 +318,10 @@ class PRPPlatform:
             pass
         try:
             self.esp32.shutdown()
+        except Exception:
+            pass
+        try:
+            self.navigation.shutdown()
         except Exception:
             pass
         try:

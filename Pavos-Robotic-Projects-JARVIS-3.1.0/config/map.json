@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "language": "es",
+  "search_limit": 5,
+  "default_view": {
+    "name": "México",
+    "lat": 23.6345,
+    "lon": -102.5528,
+    "height": 11500000
+  },
+  "home": {
+    "name": "",
+    "lat": null,
+    "lon": null,
+    "height": 18000
+  }
+}
